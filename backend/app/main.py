@@ -6,6 +6,9 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
+
+from .database import init_db, close_db
 
 # 获取项目根目录
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -18,10 +21,32 @@ THUMBNAIL_DIR = BASE_DIR / "thumbnails"
 for directory in [UPLOAD_DIR, OUTPUT_DIR, THUMBNAIL_DIR]:
     directory.mkdir(exist_ok=True)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    应用生命周期管理
+    
+    启动时初始化数据库，关闭时清理资源
+    """
+    # 启动时执行
+    print("应用启动中...")
+    await init_db()
+    print("数据库初始化完成")
+    
+    yield
+    
+    # 关闭时执行
+    print("应用关闭中...")
+    await close_db()
+    print("数据库连接已关闭")
+
+
 app = FastAPI(
     title="视频水印去除工具",
     description="AI驱动的视频处理系统，提供水印检测和智能去除功能",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # 配置CORS中间件

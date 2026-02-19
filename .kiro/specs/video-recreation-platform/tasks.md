@@ -43,7 +43,7 @@
     - 配置WebSocket路由
 
 - [ ] 2. 实现数据模型和存储层
-  - [ ] 2.1 定义核心数据类
+  - [x] 2.1 定义核心数据类
     - 创建models.py
     - 定义VideoMetadata（分辨率、时长、格式等）
     - 定义BoundingBox（x, y, width, height）
@@ -51,7 +51,7 @@
     - 定义ProcessingTask（任务状态）
     - 使用Pydantic进行数据验证
     
-  - [ ] 2.2 实现SQLite数据库
+  - [x] 2.2 实现SQLite数据库
     - 创建database.py
     - 使用SQLAlchemy定义ORM模型
     - 创建videos、watermark_regions、processing_tasks表
