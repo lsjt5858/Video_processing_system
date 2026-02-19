@@ -3,7 +3,7 @@ FastAPI应用入口
 """
 import os
 from pathlib import Path
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
@@ -125,3 +125,89 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     except WebSocketDisconnect:
         manager.disconnect(client_id)
         print(f"客户端 {client_id} 断开连接")
+
+
+# 导入视频上传模块
+from fastapi import File, UploadFile as FastAPIUploadFile
+from typing import List as TypingList
+from .video_import import (
+    upload_single_video,
+    upload_batch_videos,
+    FileSizeExceededError,
+    UnsupportedFormatError
+)
+
+
+@app.post("/api/videos/upload")
+async def upload_video(
+    file: FastAPIUploadFile = File(...),
+    user_id: str = "default_user"
+):
+    """
+    上传单个视频文件
+    
+    参数:
+        file: 视频文件
+        user_id: 用户ID（可选）
+        
+    返回:
+        VideoImportResult: 导入结果
+    """
+    try:
+        result = await upload_single_video(file, user_id)
+        return {
+            "success": True,
+            "data": {
+                "video_id": result.video_id,
+                "filename": file.filename,
+                "file_size": result.metadata.file_size,
+                "format": result.metadata.format,
+                "storage_path": result.storage_path,
+                "import_time": result.import_time.isoformat()
+            }
+        }
+    except FileSizeExceededError as e:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(e)
+        )
+    except UnsupportedFormatError as e:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"上传失败: {str(e)}"
+        )
+
+
+@app.post("/api/videos/batch-upload")
+async def batch_upload_videos(
+    files: TypingList[FastAPIUploadFile] = File(...),
+    user_id: str = "default_user"
+):
+    """
+    批量上传视频文件
+    
+    参数:
+        files: 视频文件列表（最多50个）
+        user_id: 用户ID（可选）
+        
+    返回:
+        dict: 批量上传结果
+    """
+    try:
+        results = await upload_batch_videos(files, user_id)
+        return {
+            "success": True,
+            "data": results
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"批量上传失败: {str(e)}"
+        )
