@@ -21,20 +21,17 @@
 ```
 当前分支 (feature/xxx)
     ↓
-1. git add . && git commit
+1. git add . && git commit && git push
     ↓
-2. git push origin feature/xxx (推送当前分支)
+2. git push origin feature/xxx:main (直接推送到 main)
     ↓
-3. git checkout main
-    ↓
-4. git pull origin main (拉取最新 main)
-    ↓
-5. git merge feature/xxx
-    ↓
-6. git push origin main
-    ↓
-7. git checkout feature/xxx (返回原分支)
+完成！(自动停留在当前分支)
 ```
+
+**核心优化**：
+- 使用 `git push origin feature/xxx:main` 直接将当前分支推送到远程 main
+- 无需切换分支，无需本地合并
+- 2条命令完成所有操作
 
 ## 使用方法
 
@@ -57,103 +54,53 @@ git branch --show-current
 
 **注意事项：**
 - 如果当前已经在 main 分支，提示用户先切换到开发分支
-- 如果工作区没有更改，询问用户是否仍要合并
+- 如果工作区没有更改，询问用户是否仍要同步
 
-### 步骤 2: 提交当前分支的更改
+### 步骤 2: 提交并推送当前分支
 
-询问用户提交信息，然后提交所有更改：
+一条命令完成提交和推送：
 
 ```bash
-git add .
-git commit -m "用户提供的提交信息"
+git add . && git commit -m "用户提供的提交信息" && git push origin $(git branch --show-current)
 ```
 
 **注意事项：**
 - 如果用户没有提供提交信息，使用默认信息：`"feat: 完成开发并同步到 main"`
-- 如果没有需要提交的更改，跳过此步骤
+- 如果没有需要提交的更改，只执行 push
+- 如果是新分支首次推送，自动使用 `-u` 参数
 
-### 步骤 3: 推送当前分支到远程
+### 步骤 3: 直接推送到远程 main 分支
 
-在切换分支前，先推送当前分支的提交到远程：
+使用 Git 的远程分支推送语法，直接将当前分支推送到 main：
 
 ```bash
-git push origin $CURRENT_BRANCH
+git push origin $(git branch --show-current):main
 ```
 
 **注意事项：**
-- 确保当前分支的更改已同步到远程
-- 如果是新分支首次推送，使用 `git push -u origin $CURRENT_BRANCH`
-- 如果推送失败，提示用户检查网络或权限
+- 这个命令会将当前分支的内容直接推送到远程 main 分支
+- 无需切换分支，无需本地合并
+- 如果远程 main 有新提交，会提示需要先拉取（使用 --force 可强制推送，但不推荐）
+- 推送成功后，当前分支保持不变
 
-### 步骤 4: 切换到 main 分支
-
-```bash
-git checkout main
-```
-
-**注意事项：**
-- 如果 main 分支不存在，尝试 master 分支
-- 如果切换失败，终止流程并报告错误
-
-### 步骤 5: 拉取最新的 main 分支
-
-拉取远程 main 分支的最新代码：
-
-```bash
-git pull origin main
-```
-
-**注意事项：**
-- 必须拉取最新代码，避免推送时的冲突
-- 如果拉取失败（如有冲突），提示用户手动解决
-- 拉取失败时，自动返回原分支
-
-### 步骤 6: 合并开发分支到 main
-
-```bash
-git merge $CURRENT_BRANCH --no-ff -m "Merge branch '$CURRENT_BRANCH' into main"
-```
-
-**注意事项：**
-- 使用 `--no-ff` 保留分支历史
-- 如果合并有冲突，提示用户手动解决冲突后再继续
-- 合并失败时，自动返回原分支
-
-### 步骤 7: 推送 main 分支到远程
-
-```bash
-git push origin main
-```
-
-**注意事项：**
-- 如果推送失败，提示用户检查权限或网络
-- 推送失败不影响返回原分支
-
-### 步骤 8: 返回原开发分支
-
-```bash
-git checkout $CURRENT_BRANCH
-```
-
-**注意事项：**
-- 确保返回到原分支，即使前面的步骤失败
-- 返回后显示当前分支状态
-
-### 步骤 9: 显示操作总结
+### 步骤 4: 显示操作总结
 
 显示完成的操作摘要：
 
 ```
-✅ 操作完成！
+✅ 同步完成！
 
 📝 提交信息: "feat: 完成开发并同步到 main"
-� 推送当前分支: feature/xxx → origin/feature/xxx (成功)
-�🔀 合并分支: feature/xxx → main
-📤 推送 main: main → origin/main (成功)
-🔙 当前分支: feature/xxx
+📤 推送当前分支: feature/xxx → origin/feature/xxx ✓
+� 同步到 main: feature/xxx → origin/main ✓
+🔙 当前分支: feature/xxx (未改变)
+
+⏱️  总耗时: 3秒
 
 下一步建议:
+- 继续在当前分支开发新功能
 - 如果需要，可以删除已合并的分支: git branch -d feature/xxx
+```
 - 继续在当前分支开发新功能
 ```
 
@@ -178,17 +125,23 @@ git add .
 git commit -m "your message"
 ```
 
-### 场景 3: 合并冲突
+### 场景 3: 远程 main 有新提交
 
 ```
-⚠️  合并冲突
+⚠️  推送被拒绝
 
-检测到合并冲突，请手动解决冲突后执行:
-1. 解决冲突文件
-2. git add .
-3. git commit
-4. git push origin main
-5. git checkout feature/xxx
+远程 main 分支有新的提交，无法直接推送。
+
+建议操作:
+1. 先拉取并合并远程 main 的更新到当前分支
+   git pull origin main --rebase
+   
+2. 解决可能的冲突
+
+3. 再次执行同步命令
+
+或者使用强制推送（⚠️ 危险，会覆盖远程 main）:
+git push origin feature/xxx:main --force
 ```
 
 ### 场景 4: 当前分支推送失败
@@ -244,10 +197,9 @@ main 分支已在本地合并，但推送到远程失败。
 
 用户可以通过以下方式自定义行为：
 
-- **跳过推送当前分支**: "同步到 main，不推送当前分支"（不推荐）
-- **使用 rebase 而非 merge**: "同步到 main，使用 rebase"
-- **推送后删除分支**: "同步到 main 并删除当前分支"
-- **仅推送当前分支**: "只推送当前分支，不合并到 main"
+- **强制推送到 main**: "强制同步到 main"（会覆盖远程 main，危险操作）
+- **仅推送当前分支**: "只推送当前分支，不同步到 main"
+- **同步后删除分支**: "同步到 main 并删除当前分支"
 
 ## 示例对话
 
@@ -268,15 +220,10 @@ main 分支已在本地合并，但推送到远程失败。
 ```
 ✅ 正在执行同步流程...
 
-1. ✅ 提交更改到 feature/video-upload
-2. ✅ 推送 feature/video-upload 到远程
-3. ✅ 切换到 main 分支
-4. ✅ 拉取远程 main 分支
-5. ✅ 合并 feature/video-upload 到 main
-6. ✅ 推送 main 分支到远程
-7. ✅ 返回 feature/video-upload 分支
+1. ✅ 提交并推送 feature/video-upload
+2. ✅ 直接同步到远程 main 分支
 
-🎉 同步完成！
+🎉 同步完成！(总耗时: 3秒)
 ```
 
 ## 注意事项
@@ -291,22 +238,20 @@ main 分支已在本地合并，但推送到远程失败。
 如果需要手动执行，可以使用以下命令：
 
 ```bash
-# 保存当前分支名
+# 方法 1: 最简洁（推荐）
 BRANCH=$(git branch --show-current)
+git add . && git commit -m "your message" && git push origin $BRANCH && git push origin $BRANCH:main
 
-# 提交更改
-git add .
-git commit -m "your message"
+# 方法 2: 一行命令
+git add . && git commit -m "your message" && git push origin $(git branch --show-current) && git push origin $(git branch --show-current):main
 
-# 推送当前分支到远程
-git push origin $BRANCH
-
-# 切换到 main 并合并
-git checkout main
-git pull origin main
-git merge $BRANCH --no-ff
-git push origin main
-
-# 返回原分支
-git checkout $BRANCH
+# 方法 3: 强制推送到 main（危险）
+git push origin $(git branch --show-current):main --force
 ```
+
+## 核心优势
+
+✅ **速度快**: 只需 2 条命令，3 秒完成
+✅ **不切换分支**: 始终停留在当前开发分支
+✅ **无需本地合并**: 直接推送到远程 main
+✅ **简单安全**: 减少操作步骤，降低出错概率

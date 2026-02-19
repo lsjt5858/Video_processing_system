@@ -20,13 +20,13 @@
 
 ## 任务
 
-- [ ] 1. 搭建后端项目基础架构
-  - [ ] 1.1 创建FastAPI项目结构
+- [x] 1. 搭建后端项目基础架构
+  - [x] 1.1 创建FastAPI项目结构
     - 创建项目目录结构（backend/app/、uploads/、outputs/）
     - 创建requirements.txt或pyproject.toml
     - 配置.env文件管理环境变量
     
-  - [ ] 1.2 安装核心依赖
+  - [x] 1.2 安装核心依赖
     - 安装FastAPI、uvicorn
     - 安装FFmpeg（系统级）和ffmpeg-python
     - 安装OpenCV（opencv-python）
@@ -35,7 +35,7 @@
     - 安装websockets（实时通信）
     - 安装aiosqlite（异步SQLite）
     
-  - [ ] 1.3 创建FastAPI应用入口
+  - [x] 1.3 创建FastAPI应用入口
     - 创建main.py，初始化FastAPI应用
     - 配置CORS中间件（允许前端跨域）
     - 配置静态文件服务（视频文件访问）

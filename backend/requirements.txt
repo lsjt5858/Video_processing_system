@@ -1,0 +1,25 @@
+# Web框架
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# 文件上传
+python-multipart==0.0.6
+
+# 视频处理
+ffmpeg-python==0.2.0
+opencv-python==4.8.1.78
+
+# 视频下载
+yt-dlp==2023.11.16
+
+# 数据库
+sqlalchemy==2.0.23
+aiosqlite==0.19.0
+
+# WebSocket
+websockets==12.0
+
+# 工具库
+python-dotenv==1.0.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
