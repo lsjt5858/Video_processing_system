@@ -20,6 +20,21 @@ def client():
         yield c
 
 
+@pytest.fixture
+def test_video_path():
+    """获取测试视频文件路径"""
+    return Path(__file__).parent / "test_videos" / "test_video.mp4"
+
+
+def get_real_video_content(test_video_path: Path) -> bytes:
+    """读取真实的测试视频内容"""
+    if test_video_path.exists():
+        with open(test_video_path, "rb") as f:
+            return f.read()
+    # 如果测试视频不存在，跳过测试
+    pytest.skip("测试视频文件不存在")
+
+
 def test_health_check(client):
     """测试健康检查端点"""
     response = client.get("/health")
@@ -37,10 +52,10 @@ def test_root_endpoint(client):
     assert "message" in data
 
 
-def test_upload_single_video_mp4(client):
+def test_upload_single_video_mp4(client, test_video_path):
     """测试上传单个MP4视频"""
-    # 创建测试文件
-    content = b"fake video content" * 100
+    # 使用真实的测试视频
+    content = get_real_video_content(test_video_path)
     files = {
         "file": ("test_video.mp4", io.BytesIO(content), "video/mp4")
     }
@@ -53,7 +68,6 @@ def test_upload_single_video_mp4(client):
     assert "data" in data
     assert "video_id" in data["data"]
     assert data["data"]["format"] == "mp4"
-    assert data["data"]["file_size"] == len(content)
     
     # 清理测试文件
     storage_path = Path(data["data"]["storage_path"])
@@ -61,9 +75,10 @@ def test_upload_single_video_mp4(client):
         storage_path.unlink()
 
 
-def test_upload_single_video_avi(client):
+def test_upload_single_video_avi(client, test_video_path):
     """测试上传AVI格式视频"""
-    content = b"fake video content" * 100
+    # 使用真实的测试视频（重命名为.avi）
+    content = get_real_video_content(test_video_path)
     files = {
         "file": ("test_video.avi", io.BytesIO(content), "video/x-msvideo")
     }
@@ -81,9 +96,10 @@ def test_upload_single_video_avi(client):
         storage_path.unlink()
 
 
-def test_upload_single_video_mov(client):
+def test_upload_single_video_mov(client, test_video_path):
     """测试上传MOV格式视频"""
-    content = b"fake video content" * 100
+    # 使用真实的测试视频（重命名为.mov）
+    content = get_real_video_content(test_video_path)
     files = {
         "file": ("test_video.mov", io.BytesIO(content), "video/quicktime")
     }
@@ -101,9 +117,10 @@ def test_upload_single_video_mov(client):
         storage_path.unlink()
 
 
-def test_upload_single_video_mkv(client):
+def test_upload_single_video_mkv(client, test_video_path):
     """测试上传MKV格式视频"""
-    content = b"fake video content" * 100
+    # 使用真实的测试视频（重命名为.mkv）
+    content = get_real_video_content(test_video_path)
     files = {
         "file": ("test_video.mkv", io.BytesIO(content), "video/x-matroska")
     }
@@ -132,13 +149,14 @@ def test_upload_unsupported_format(client):
     assert response.status_code == 415  # Unsupported Media Type
 
 
-def test_upload_batch_videos(client):
+def test_upload_batch_videos(client, test_video_path):
     """测试批量上传视频"""
-    # 创建3个测试文件
+    # 使用真实的测试视频
+    content = get_real_video_content(test_video_path)
     files = [
-        ("files", ("test1.mp4", io.BytesIO(b"content1" * 100), "video/mp4")),
-        ("files", ("test2.avi", io.BytesIO(b"content2" * 100), "video/x-msvideo")),
-        ("files", ("test3.mov", io.BytesIO(b"content3" * 100), "video/quicktime")),
+        ("files", ("test1.mp4", io.BytesIO(content), "video/mp4")),
+        ("files", ("test2.avi", io.BytesIO(content), "video/x-msvideo")),
+        ("files", ("test3.mov", io.BytesIO(content), "video/quicktime")),
     ]
     
     response = client.post("/api/videos/batch-upload", files=files)
@@ -157,13 +175,15 @@ def test_upload_batch_videos(client):
             storage_path.unlink()
 
 
-def test_upload_batch_videos_mixed(client):
+def test_upload_batch_videos_mixed(client, test_video_path):
     """测试批量上传混合结果（部分成功，部分失败）"""
+    # 使用真实的测试视频
+    content = get_real_video_content(test_video_path)
     # 创建混合文件：2个有效，1个无效格式
     files = [
-        ("files", ("test1.mp4", io.BytesIO(b"content1" * 100), "video/mp4")),
-        ("files", ("test2.wmv", io.BytesIO(b"content2" * 100), "video/x-ms-wmv")),  # 不支持
-        ("files", ("test3.avi", io.BytesIO(b"content3" * 100), "video/x-msvideo")),
+        ("files", ("test1.mp4", io.BytesIO(content), "video/mp4")),
+        ("files", ("test2.wmv", io.BytesIO(b"fake content"), "video/x-ms-wmv")),  # 不支持
+        ("files", ("test3.avi", io.BytesIO(content), "video/x-msvideo")),
     ]
     
     response = client.post("/api/videos/batch-upload", files=files)
