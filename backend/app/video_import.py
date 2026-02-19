@@ -7,8 +7,10 @@
 import os
 import uuid
 import shutil
+import json
+import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from fastapi import UploadFile, HTTPException, status
@@ -40,6 +42,11 @@ class FileSizeExceededError(Exception):
 
 class UnsupportedFormatError(Exception):
     """不支持的视频格式错误"""
+    pass
+
+
+class MetadataExtractionError(Exception):
+    """元数据提取失败错误"""
     pass
 
 
@@ -81,6 +88,116 @@ def validate_file_size(file_size: int) -> None:
         raise FileSizeExceededError(
             f"文件大小 {size_gb:.2f}GB 超过限制 5GB"
         )
+
+
+def extract_video_metadata(video_path: str) -> Dict[str, Any]:
+    """
+    使用FFprobe提取视频元数据
+    
+    参数:
+        video_path: 视频文件路径
+        
+    返回:
+        Dict[str, Any]: 包含视频元数据的字典
+        
+    异常:
+        MetadataExtractionError: 元数据提取失败
+    """
+    try:
+        # 使用ffprobe提取视频信息
+        cmd = [
+            'ffprobe',
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_format',
+            '-show_streams',
+            video_path
+        ]
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30  # 30秒超时
+        )
+        
+        if result.returncode != 0:
+            raise MetadataExtractionError(
+                f"FFprobe执行失败: {result.stderr}"
+            )
+        
+        # 解析JSON输出
+        probe_data = json.loads(result.stdout)
+        
+        # 查找视频流
+        video_stream = None
+        for stream in probe_data.get('streams', []):
+            if stream.get('codec_type') == 'video':
+                video_stream = stream
+                break
+        
+        if not video_stream:
+            raise MetadataExtractionError("未找到视频流")
+        
+        # 提取元数据
+        format_info = probe_data.get('format', {})
+        
+        # 分辨率
+        width = int(video_stream.get('width', 0))
+        height = int(video_stream.get('height', 0))
+        
+        # 时长（秒）
+        duration = float(format_info.get('duration', 0))
+        if duration == 0:
+            # 尝试从视频流获取时长
+            duration = float(video_stream.get('duration', 0))
+        
+        # 编码格式
+        codec = video_stream.get('codec_name', 'unknown')
+        
+        # 帧率
+        fps_str = video_stream.get('r_frame_rate', '0/1')
+        try:
+            num, den = map(int, fps_str.split('/'))
+            framerate = num / den if den != 0 else 0.0
+        except (ValueError, ZeroDivisionError):
+            framerate = 0.0
+        
+        # 码率（bps）
+        bitrate = int(format_info.get('bit_rate', 0))
+        if bitrate == 0:
+            # 尝试从视频流获取码率
+            bitrate = int(video_stream.get('bit_rate', 0))
+        
+        # 文件大小
+        file_size = int(format_info.get('size', 0))
+        if file_size == 0:
+            # 如果format中没有size，从文件系统获取
+            file_size = Path(video_path).stat().st_size
+        
+        # 验证必需字段
+        if width == 0 or height == 0:
+            raise MetadataExtractionError("无法提取视频分辨率")
+        if duration == 0:
+            raise MetadataExtractionError("无法提取视频时长")
+        if framerate == 0:
+            raise MetadataExtractionError("无法提取视频帧率")
+        
+        return {
+            'resolution': (width, height),
+            'duration': duration,
+            'codec': codec,
+            'framerate': framerate,
+            'bitrate': bitrate,
+            'file_size': file_size
+        }
+        
+    except subprocess.TimeoutExpired:
+        raise MetadataExtractionError("元数据提取超时")
+    except json.JSONDecodeError as e:
+        raise MetadataExtractionError(f"解析FFprobe输出失败: {str(e)}")
+    except Exception as e:
+        raise MetadataExtractionError(f"元数据提取失败: {str(e)}")
 
 
 async def save_upload_file(upload_file: UploadFile) -> tuple[str, int]:
@@ -149,6 +266,7 @@ async def upload_single_video(
     异常:
         FileSizeExceededError: 文件大小超过5GB
         UnsupportedFormatError: 不支持的视频格式
+        MetadataExtractionError: 元数据提取失败
     """
     # 保存文件
     file_path, file_size = await save_upload_file(file)
@@ -159,50 +277,59 @@ async def upload_single_video(
     # 获取文件格式
     file_format = Path(file_path).suffix.lstrip('.').lower()
     
-    # 创建临时元数据（实际元数据提取将在3.2任务中实现）
-    # 这里先创建基本的元数据结构
-    metadata = VideoMetadata(
-        video_id=video_id,
-        format=VideoFormat(file_format),
-        resolution=(1920, 1080),  # 临时值，将在元数据提取时更新
-        duration=1.0,  # 临时值（设为1.0以通过验证）
-        codec="unknown",  # 临时值
-        framerate=30.0,  # 临时值
-        bitrate=5000000,  # 临时值
-        file_size=file_size,
-        created_at=datetime.now()
-    )
-    
-    # 保存到数据库
-    db_gen = get_db()
-    db = await anext(db_gen)
     try:
-        await create_video(
-            db=db,
+        # 提取视频元数据
+        metadata_dict = extract_video_metadata(file_path)
+        
+        # 创建元数据对象
+        metadata = VideoMetadata(
             video_id=video_id,
-            user_id=user_id,
-            format=file_format,
-            resolution_width=metadata.resolution[0],
-            resolution_height=metadata.resolution[1],
-            duration=1.0,  # 临时值
-            codec=metadata.codec,
-            framerate=metadata.framerate,
-            bitrate=metadata.bitrate,
-            file_size=file_size,
-            storage_path=file_path,
-            import_source="local"
+            format=VideoFormat(file_format),
+            resolution=metadata_dict['resolution'],
+            duration=metadata_dict['duration'],
+            codec=metadata_dict['codec'],
+            framerate=metadata_dict['framerate'],
+            bitrate=metadata_dict['bitrate'],
+            file_size=metadata_dict['file_size'],
+            created_at=datetime.now()
         )
-    finally:
-        await db.close()
-    
-    # 返回导入结果
-    return VideoImportResult(
-        video_id=video_id,
-        metadata=metadata,
-        storage_path=file_path,
-        import_source="local",
-        import_time=datetime.now()
-    )
+        
+        # 保存到数据库
+        db_gen = get_db()
+        db = await anext(db_gen)
+        try:
+            await create_video(
+                db=db,
+                video_id=video_id,
+                user_id=user_id,
+                format=file_format,
+                resolution_width=metadata.resolution[0],
+                resolution_height=metadata.resolution[1],
+                duration=metadata.duration,
+                codec=metadata.codec,
+                framerate=metadata.framerate,
+                bitrate=metadata.bitrate,
+                file_size=metadata.file_size,
+                storage_path=file_path,
+                import_source="local"
+            )
+        finally:
+            await db.close()
+        
+        # 返回导入结果
+        return VideoImportResult(
+            video_id=video_id,
+            metadata=metadata,
+            storage_path=file_path,
+            import_source="local",
+            import_time=datetime.now()
+        )
+        
+    except MetadataExtractionError as e:
+        # 元数据提取失败，删除已上传的文件
+        if Path(file_path).exists():
+            Path(file_path).unlink()
+        raise e
 
 
 async def upload_batch_videos(
@@ -245,7 +372,7 @@ async def upload_batch_videos(
                 "file_size": result.metadata.file_size,
                 "storage_path": result.storage_path
             })
-        except (FileSizeExceededError, UnsupportedFormatError) as e:
+        except (FileSizeExceededError, UnsupportedFormatError, MetadataExtractionError) as e:
             results["failed"].append({
                 "filename": file.filename,
                 "error": str(e)

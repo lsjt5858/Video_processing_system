@@ -80,8 +80,16 @@ def create_mock_upload_file(filename: str, content: bytes) -> UploadFile:
 @pytest.mark.asyncio
 async def test_upload_single_video_success():
     """测试单个视频上传成功"""
-    # 创建一个小的测试文件（1KB）
-    content = b"fake video content" * 50  # 约1KB
+    # 使用真实的测试视频文件
+    test_video_path = Path(__file__).parent / "test_videos" / "test_video.mp4"
+    
+    if not test_video_path.exists():
+        pytest.skip("测试视频不存在，跳过测试")
+    
+    # 读取测试视频文件
+    with open(test_video_path, "rb") as f:
+        content = f.read()
+    
     upload_file = create_mock_upload_file("test_video.mp4", content)
     
     try:
@@ -93,6 +101,12 @@ async def test_upload_single_video_success():
         assert result.metadata.file_size == len(content)
         assert result.import_source == "local"
         assert Path(result.storage_path).exists()
+        
+        # 验证元数据已正确提取
+        assert result.metadata.resolution[0] > 0
+        assert result.metadata.resolution[1] > 0
+        assert result.metadata.duration > 0
+        assert result.metadata.framerate > 0
         
         # 清理测试文件
         Path(result.storage_path).unlink()
@@ -114,9 +128,19 @@ async def test_upload_single_video_unsupported_format():
 @pytest.mark.asyncio
 async def test_upload_batch_videos_success():
     """测试批量上传成功"""
-    # 创建3个测试文件
+    # 使用真实的测试视频文件
+    test_video_path = Path(__file__).parent / "test_videos" / "test_video.mp4"
+    
+    if not test_video_path.exists():
+        pytest.skip("测试视频不存在，跳过测试")
+    
+    # 读取测试视频文件
+    with open(test_video_path, "rb") as f:
+        content = f.read()
+    
+    # 创建3个测试文件（使用相同的真实视频内容）
     files = [
-        create_mock_upload_file(f"test_video_{i}.mp4", b"content" * 100)
+        create_mock_upload_file(f"test_video_{i}.mp4", content)
         for i in range(3)
     ]
     
@@ -140,11 +164,21 @@ async def test_upload_batch_videos_success():
 @pytest.mark.asyncio
 async def test_upload_batch_videos_mixed_results():
     """测试批量上传混合结果（部分成功，部分失败）"""
+    # 使用真实的测试视频文件
+    test_video_path = Path(__file__).parent / "test_videos" / "test_video.mp4"
+    
+    if not test_video_path.exists():
+        pytest.skip("测试视频不存在，跳过测试")
+    
+    # 读取测试视频文件
+    with open(test_video_path, "rb") as f:
+        valid_content = f.read()
+    
     # 创建混合文件：2个有效，1个无效格式
     files = [
-        create_mock_upload_file("test_video_1.mp4", b"content" * 100),
+        create_mock_upload_file("test_video_1.mp4", valid_content),
         create_mock_upload_file("test_video_2.wmv", b"content" * 100),  # 不支持的格式
-        create_mock_upload_file("test_video_3.avi", b"content" * 100),
+        create_mock_upload_file("test_video_3.avi", valid_content),
     ]
     
     try:
