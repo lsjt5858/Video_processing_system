@@ -42,7 +42,7 @@
     - 添加健康检查端点
     - 配置WebSocket路由
 
-- [ ] 2. 实现数据模型和存储层
+- [x] 2. 实现数据模型和存储层
   - [x] 2.1 定义核心数据类
     - 创建models.py
     - 定义VideoMetadata（分辨率、时长、格式等）
@@ -57,7 +57,7 @@
     - 创建videos、watermark_regions、processing_tasks表
     - 实现数据库初始化和连接管理
     
-  - [ ] 2.3 实现数据访问层
+  - [x] 2.3 实现数据访问层
     - 创建crud.py
     - 实现视频CRUD操作
     - 实现水印区域CRUD操作
