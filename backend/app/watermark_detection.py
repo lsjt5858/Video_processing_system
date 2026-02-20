@@ -273,3 +273,186 @@ async def extract_frames_for_preview(
         
     except Exception as e:
         raise FrameExtractionError(f"提取预览帧失败: {str(e)}")
+
+
+async def validate_bounding_box(
+    bbox: BoundingBox,
+    video_width: int,
+    video_height: int
+) -> bool:
+    """
+    验证边界框坐标是否有效
+    
+    参数:
+        bbox: 边界框对象
+        video_width: 视频宽度
+        video_height: 视频高度
+        
+    返回:
+        bool: 边界框是否有效
+    """
+    # 检查坐标是否为负数
+    if bbox.x < 0 or bbox.y < 0:
+        return False
+    
+    # 检查宽度和高度是否为正数
+    if bbox.width <= 0 or bbox.height <= 0:
+        return False
+    
+    # 检查边界框是否超出视频范围
+    if bbox.x + bbox.width > video_width:
+        return False
+    
+    if bbox.y + bbox.height > video_height:
+        return False
+    
+    return True
+
+
+async def save_manual_watermark_region(
+    db,
+    video_id: str,
+    bbox: BoundingBox,
+    start_time: float = 0.0,
+    end_time: Optional[float] = None,
+    watermark_type: str = "manual",
+    video_duration: Optional[float] = None
+) -> WatermarkRegion:
+    """
+    保存手动标记的水印区域到数据库
+    
+    参数:
+        db: 数据库会话
+        video_id: 视频ID
+        bbox: 边界框
+        start_time: 开始时间（秒），默认0.0
+        end_time: 结束时间（秒），如果为None则使用视频总时长
+        watermark_type: 水印类型，默认"manual"
+        video_duration: 视频总时长（秒），用于设置默认end_time
+        
+    返回:
+        WatermarkRegion: 保存的水印区域对象
+        
+    异常:
+        ValueError: 参数验证失败
+    """
+    from . import crud
+    
+    # 如果未提供end_time，使用视频总时长
+    if end_time is None:
+        if video_duration is None:
+            raise ValueError("必须提供end_time或video_duration")
+        end_time = video_duration
+    
+    # 验证时间范围
+    if start_time < 0:
+        raise ValueError("开始时间不能为负数")
+    
+    if end_time <= start_time:
+        raise ValueError("结束时间必须大于开始时间")
+    
+    # 生成唯一的区域ID
+    region_id = f"reg_{uuid.uuid4().hex[:12]}"
+    
+    # 创建水印区域记录
+    region = await crud.create_watermark_region(
+        db=db,
+        region_id=region_id,
+        video_id=video_id,
+        bbox_x=bbox.x,
+        bbox_y=bbox.y,
+        bbox_width=bbox.width,
+        bbox_height=bbox.height,
+        start_time=start_time,
+        end_time=end_time,
+        confidence=1.0,  # 手动标记的置信度为1.0
+        watermark_type=watermark_type,
+        detection_method="manual"
+    )
+    
+    return region
+
+
+async def mark_watermark_regions(
+    db,
+    video_id: str,
+    video_path: str,
+    bounding_boxes: List[dict]
+) -> List[WatermarkRegion]:
+    """
+    批量标记水印区域
+    
+    参数:
+        db: 数据库会话
+        video_id: 视频ID
+        video_path: 视频文件路径
+        bounding_boxes: 边界框列表，每个元素包含 x, y, width, height, start_time, end_time, watermark_type
+        
+    返回:
+        List[WatermarkRegion]: 保存的水印区域列表
+        
+    异常:
+        ValueError: 边界框验证失败
+        FrameExtractionError: 无法获取视频信息
+    """
+    try:
+        # 获取视频信息
+        cap = cv2.VideoCapture(video_path)
+        
+        if not cap.isOpened():
+            raise FrameExtractionError(f"无法打开视频文件: {video_path}")
+        
+        video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        video_duration = total_frames / fps if fps > 0 else 0
+        
+        cap.release()
+        
+        # 保存所有水印区域
+        saved_regions = []
+        
+        for bbox_data in bounding_boxes:
+            # 创建BoundingBox对象
+            bbox = BoundingBox(
+                x=bbox_data.get("x", 0),
+                y=bbox_data.get("y", 0),
+                width=bbox_data.get("width", 0),
+                height=bbox_data.get("height", 0)
+            )
+            
+            # 验证边界框
+            if not await validate_bounding_box(bbox, video_width, video_height):
+                raise ValueError(
+                    f"无效的边界框: x={bbox.x}, y={bbox.y}, "
+                    f"width={bbox.width}, height={bbox.height}, "
+                    f"视频尺寸: {video_width}x{video_height}"
+                )
+            
+            # 获取时间范围和水印类型
+            start_time = bbox_data.get("start_time", 0.0)
+            end_time = bbox_data.get("end_time", video_duration)
+            watermark_type = bbox_data.get("watermark_type", "manual")
+            
+            # 保存水印区域
+            region = await save_manual_watermark_region(
+                db=db,
+                video_id=video_id,
+                bbox=bbox,
+                start_time=start_time,
+                end_time=end_time,
+                watermark_type=watermark_type,
+                video_duration=video_duration
+            )
+            
+            saved_regions.append(region)
+        
+        return saved_regions
+        
+    except cv2.error as e:
+        raise FrameExtractionError(f"OpenCV错误: {str(e)}")
+    except Exception as e:
+        if isinstance(e, (ValueError, FrameExtractionError)):
+            raise
+        raise FrameExtractionError(f"标记水印区域失败: {str(e)}")
