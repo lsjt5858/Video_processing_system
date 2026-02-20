@@ -346,14 +346,18 @@ async def upload_single_video(
 
 async def upload_batch_videos(
     files: List[UploadFile],
-    user_id: str = "default_user"
+    user_id: str = "default_user",
+    websocket_callback: Optional[Callable] = None,
+    client_id: Optional[str] = None
 ) -> dict:
     """
-    批量上传视频文件
+    批量上传视频文件（支持并发和进度推送）
     
     参数:
         files: 文件列表（最多50个）
         user_id: 用户ID
+        websocket_callback: WebSocket回调函数，用于推送进度
+        client_id: 客户端ID，用于WebSocket消息推送
         
     返回:
         dict: 批量上传结果，包含成功和失败的文件信息
@@ -371,32 +375,123 @@ async def upload_batch_videos(
     results = {
         "total": len(files),
         "successful": [],
-        "failed": []
+        "failed": [],
+        "in_progress": []
     }
     
-    # 处理每个文件
-    for file in files:
-        try:
-            result = await upload_single_video(file, user_id)
-            results["successful"].append({
-                "filename": file.filename,
-                "video_id": result.video_id,
-                "file_size": result.metadata.file_size,
-                "storage_path": result.storage_path
-            })
-        except (FileSizeExceededError, UnsupportedFormatError, MetadataExtractionError) as e:
-            results["failed"].append({
-                "filename": file.filename,
-                "error": str(e)
-            })
-        except Exception as e:
-            results["failed"].append({
-                "filename": file.filename,
-                "error": f"上传失败: {str(e)}"
-            })
+    # 创建信号量，限制并发上传数量为5
+    semaphore = asyncio.Semaphore(5)
+    
+    # 用于跟踪进度的共享状态
+    completed_count = 0
+    lock = asyncio.Lock()
+    
+    async def upload_with_progress(file: UploadFile, index: int):
+        """带进度跟踪的上传函数"""
+        nonlocal completed_count
+        
+        async with semaphore:
+            try:
+                # 推送开始上传消息
+                if websocket_callback and client_id:
+                    await websocket_callback(client_id, {
+                        "type": "batch_upload_progress",
+                        "file_index": index,
+                        "filename": file.filename,
+                        "status": "uploading",
+                        "progress": 0,
+                        "completed": completed_count,
+                        "total": len(files)
+                    })
+                
+                # 执行上传
+                result = await upload_single_video(file, user_id)
+                
+                # 更新成功结果
+                async with lock:
+                    completed_count += 1
+                    results["successful"].append({
+                        "filename": file.filename,
+                        "video_id": result.video_id,
+                        "file_size": result.metadata.file_size,
+                        "storage_path": result.storage_path,
+                        "index": index
+                    })
+                
+                # 推送完成消息
+                if websocket_callback and client_id:
+                    await websocket_callback(client_id, {
+                        "type": "batch_upload_progress",
+                        "file_index": index,
+                        "filename": file.filename,
+                        "status": "completed",
+                        "progress": 100,
+                        "video_id": result.video_id,
+                        "completed": completed_count,
+                        "total": len(files)
+                    })
+                    
+            except (FileSizeExceededError, UnsupportedFormatError, MetadataExtractionError) as e:
+                # 更新失败结果
+                async with lock:
+                    completed_count += 1
+                    results["failed"].append({
+                        "filename": file.filename,
+                        "error": str(e),
+                        "index": index
+                    })
+                
+                # 推送失败消息
+                if websocket_callback and client_id:
+                    await websocket_callback(client_id, {
+                        "type": "batch_upload_progress",
+                        "file_index": index,
+                        "filename": file.filename,
+                        "status": "failed",
+                        "error": str(e),
+                        "completed": completed_count,
+                        "total": len(files)
+                    })
+                    
+            except Exception as e:
+                # 更新失败结果
+                async with lock:
+                    completed_count += 1
+                    results["failed"].append({
+                        "filename": file.filename,
+                        "error": f"上传失败: {str(e)}",
+                        "index": index
+                    })
+                
+                # 推送失败消息
+                if websocket_callback and client_id:
+                    await websocket_callback(client_id, {
+                        "type": "batch_upload_progress",
+                        "file_index": index,
+                        "filename": file.filename,
+                        "status": "failed",
+                        "error": f"上传失败: {str(e)}",
+                        "completed": completed_count,
+                        "total": len(files)
+                    })
+    
+    # 创建所有上传任务
+    tasks = [upload_with_progress(file, i) for i, file in enumerate(files)]
+    
+    # 并发执行所有任务
+    await asyncio.gather(*tasks)
     
     results["success_count"] = len(results["successful"])
     results["failed_count"] = len(results["failed"])
+    
+    # 推送批量上传完成消息
+    if websocket_callback and client_id:
+        await websocket_callback(client_id, {
+            "type": "batch_upload_complete",
+            "total": len(files),
+            "success_count": results["success_count"],
+            "failed_count": results["failed_count"]
+        })
     
     return results
 

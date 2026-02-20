@@ -190,20 +190,30 @@ async def upload_video(
 @app.post("/api/videos/batch-upload")
 async def batch_upload_videos(
     files: TypingList[FastAPIUploadFile] = File(...),
-    user_id: str = "default_user"
+    user_id: str = "default_user",
+    client_id: str = None
 ):
     """
-    批量上传视频文件
+    批量上传视频文件（支持并发和进度推送）
     
     参数:
         files: 视频文件列表（最多50个）
         user_id: 用户ID（可选）
+        client_id: 客户端ID，用于WebSocket进度推送（可选）
         
     返回:
         dict: 批量上传结果
     """
     try:
-        results = await upload_batch_videos(files, user_id)
+        # 如果提供了client_id，使用WebSocket推送进度
+        websocket_callback = manager.send_message if client_id else None
+        
+        results = await upload_batch_videos(
+            files=files,
+            user_id=user_id,
+            websocket_callback=websocket_callback,
+            client_id=client_id
+        )
         return {
             "success": True,
             "data": results
