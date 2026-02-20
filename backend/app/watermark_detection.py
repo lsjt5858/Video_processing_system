@@ -7,12 +7,22 @@
 import os
 import cv2
 import uuid
+import subprocess
+import json
 from pathlib import Path
 from typing import List, Tuple, Optional
 from datetime import datetime
 
 from .models import WatermarkRegion, BoundingBox, DetectionResult
 from .errors import FrameExtractionError, CorruptedVideoError, log_error
+from .cache_manager import (
+    cache_frames,
+    get_cached_frames,
+    cache_thumbnail,
+    get_cached_thumbnail,
+    cache_video_metadata,
+    get_cached_metadata
+)
 
 
 # 获取项目根目录
@@ -23,15 +33,17 @@ THUMBNAIL_DIR = BASE_DIR / "thumbnails"
 async def extract_key_frames(
     video_path: str,
     num_frames: int = 10,
-    save_thumbnails: bool = True
+    save_thumbnails: bool = True,
+    use_cache: bool = True
 ) -> List[Tuple[int, str]]:
     """
-    从视频中提取关键帧
+    从视频中提取关键帧（优化版：使用FFmpeg + 缓存）
     
     参数:
         video_path: 视频文件路径
         num_frames: 要提取的帧数量（默认10帧）
         save_thumbnails: 是否保存缩略图（默认True）
+        use_cache: 是否使用缓存（默认True）
         
     返回:
         List[Tuple[int, str]]: 帧列表，每个元素为 (帧索引, 缩略图路径)
@@ -39,76 +51,131 @@ async def extract_key_frames(
     异常:
         FrameExtractionError: 帧提取失败
     """
+    video_id = Path(video_path).stem
+    
+    # 检查缓存
+    if use_cache:
+        cached_frames = await get_cached_frames(video_id)
+        if cached_frames:
+            # 验证缓存的文件是否存在
+            all_exist = all(Path(frame[1]).exists() for frame in cached_frames if frame[1])
+            if all_exist:
+                return cached_frames
+    
     try:
-        # 打开视频文件
-        cap = cv2.VideoCapture(video_path)
+        # 使用FFmpeg提取帧（比OpenCV快）
+        # 首先获取视频信息
+        probe_cmd = [
+            'ffprobe',
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_streams',
+            '-select_streams', 'v:0',
+            video_path
+        ]
         
-        if not cap.isOpened():
-            raise FrameExtractionError(f"无法打开视频文件: {video_path}")
+        probe_result = subprocess.run(
+            probe_cmd,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
         
-        # 获取视频信息
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
+        if probe_result.returncode != 0:
+            raise FrameExtractionError(f"无法获取视频信息: {probe_result.stderr}")
         
-        if total_frames == 0:
-            raise FrameExtractionError("视频帧数为0")
+        probe_data = json.loads(probe_result.stdout)
+        if not probe_data.get('streams'):
+            raise FrameExtractionError("未找到视频流")
+        
+        stream = probe_data['streams'][0]
+        
+        # 获取总帧数和帧率
+        nb_frames = int(stream.get('nb_frames', 0))
+        fps_str = stream.get('r_frame_rate', '30/1')
+        try:
+            num, den = map(int, fps_str.split('/'))
+            fps = num / den if den != 0 else 30.0
+        except:
+            fps = 30.0
+        
+        # 如果无法从流中获取帧数，使用时长计算
+        if nb_frames == 0:
+            duration = float(stream.get('duration', 0))
+            if duration > 0:
+                nb_frames = int(duration * fps)
+        
+        if nb_frames == 0:
+            raise FrameExtractionError("无法确定视频帧数")
         
         # 计算要提取的帧索引（均匀分布）
-        frame_indices = []
-        if num_frames >= total_frames:
-            # 如果请求的帧数大于等于总帧数，提取所有帧
-            frame_indices = list(range(total_frames))
+        if num_frames >= nb_frames:
+            frame_indices = list(range(nb_frames))
         else:
-            # 均匀分布提取帧
-            step = total_frames / num_frames
+            step = nb_frames / num_frames
             frame_indices = [int(i * step) for i in range(num_frames)]
         
-        # 提取帧并保存缩略图
+        # 使用FFmpeg批量提取帧（更快）
         extracted_frames = []
-        video_id = Path(video_path).stem
         
         for frame_idx in frame_indices:
-            # 设置视频位置到指定帧
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            # 检查缩略图缓存
+            if use_cache:
+                cached_thumb = await get_cached_thumbnail(video_id, frame_idx)
+                if cached_thumb and Path(cached_thumb).exists():
+                    extracted_frames.append((frame_idx, cached_thumb))
+                    continue
             
-            # 读取帧
-            ret, frame = cap.read()
-            
-            if not ret:
-                print(f"警告: 无法读取帧 {frame_idx}")
-                continue
-            
-            # 保存缩略图
             if save_thumbnails:
                 thumbnail_filename = f"{video_id}_frame_{frame_idx}.jpg"
                 thumbnail_path = THUMBNAIL_DIR / thumbnail_filename
                 
-                # 生成缩略图（调整大小以减小文件大小）
-                height, width = frame.shape[:2]
-                max_width = 800
-                if width > max_width:
-                    scale = max_width / width
-                    new_width = max_width
-                    new_height = int(height * scale)
-                    frame = cv2.resize(frame, (new_width, new_height))
+                # 计算时间戳
+                timestamp = frame_idx / fps
                 
-                # 保存缩略图
-                cv2.imwrite(str(thumbnail_path), frame)
+                # 使用FFmpeg提取单帧（使用scale滤镜调整大小）
+                ffmpeg_cmd = [
+                    'ffmpeg',
+                    '-ss', str(timestamp),
+                    '-i', video_path,
+                    '-vframes', '1',
+                    '-vf', 'scale=800:-1',  # 宽度800，高度自动
+                    '-q:v', '2',  # 高质量
+                    '-y',  # 覆盖输出文件
+                    str(thumbnail_path)
+                ]
                 
-                extracted_frames.append((frame_idx, str(thumbnail_path)))
+                result = subprocess.run(
+                    ffmpeg_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if result.returncode == 0 and thumbnail_path.exists():
+                    extracted_frames.append((frame_idx, str(thumbnail_path)))
+                    
+                    # 缓存缩略图路径
+                    if use_cache:
+                        await cache_thumbnail(video_id, frame_idx, str(thumbnail_path))
+                else:
+                    print(f"警告: 无法提取帧 {frame_idx}")
             else:
                 extracted_frames.append((frame_idx, None))
-        
-        # 释放视频资源
-        cap.release()
         
         if not extracted_frames:
             raise FrameExtractionError("未能提取任何帧")
         
+        # 缓存提取的帧列表
+        if use_cache:
+            await cache_frames(video_id, extracted_frames)
+        
         return extracted_frames
         
-    except cv2.error as e:
-        raise FrameExtractionError(f"OpenCV错误: {str(e)}")
+    except subprocess.TimeoutExpired:
+        raise FrameExtractionError("帧提取超时")
+    except json.JSONDecodeError as e:
+        raise FrameExtractionError(f"解析视频信息失败: {str(e)}")
     except Exception as e:
         raise FrameExtractionError(f"帧提取失败: {str(e)}")
 

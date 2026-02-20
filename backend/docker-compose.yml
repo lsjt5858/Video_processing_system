@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: video-watermark-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # 持久化存储视频文件
+      - ./uploads:/app/uploads
+      - ./outputs:/app/outputs
+      - ./thumbnails:/app/thumbnails
+      # 持久化数据库
+      - ./video_platform.db:/app/video_platform.db
+    environment:
+      # 应用配置
+      - APP_NAME=视频水印去除工具
+      - APP_VERSION=1.0.0
+      - DEBUG=false
+      
+      # 服务器配置
+      - HOST=0.0.0.0
+      - PORT=8000
+      
+      # 文件存储路径
+      - UPLOAD_DIR=uploads
+      - OUTPUT_DIR=outputs
+      - THUMBNAIL_DIR=thumbnails
+      
+      # 文件大小限制（5GB）
+      - MAX_FILE_SIZE=5368709120
+      
+      # 批量处理限制
+      - MAX_BATCH_UPLOAD=50
+      - MAX_PARALLEL_UPLOAD=5
+      - MAX_PARALLEL_PROCESS=3
+      
+      # 数据库配置
+      - DATABASE_URL=sqlite+aiosqlite:///./video_platform.db
+      
+      # 支持的视频格式
+      - SUPPORTED_FORMATS=mp4,avi,mov,mkv
+    restart: unless-stopped
+    networks:
+      - video-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  video-network:
+    driver: bridge

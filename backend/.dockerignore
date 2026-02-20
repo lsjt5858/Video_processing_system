@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Testing
+.pytest_cache/
+test_*.py
+*_test.py
+test_videos/
+test_outputs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Logs
+logs/
+*.log
+
+# Database (will be mounted as volume)
+*.db
+*.db-journal
+
+# Environment
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+
+# Build artifacts
+dist/
+build/
+*.egg-info/

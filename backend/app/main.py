@@ -28,17 +28,46 @@ async def lifespan(app: FastAPI):
     """
     应用生命周期管理
     
-    启动时初始化数据库，关闭时清理资源
+    启动时初始化数据库、队列和缓存，关闭时清理资源
     """
     # 启动时执行
     print("应用启动中...")
     await init_db()
     print("数据库初始化完成")
     
+    # 启动队列管理器
+    from .queue_manager import video_queue
+    await video_queue.start()
+    print("视频处理队列已启动")
+    
+    # 启动缓存管理器
+    from .cache_manager import cache_manager
+    await cache_manager.start()
+    print("缓存管理器已启动")
+    
+    # 启动分片上传管理器
+    from .chunked_upload import init_chunked_upload_manager
+    chunked_manager = init_chunked_upload_manager(UPLOAD_DIR)
+    await chunked_manager.start()
+    print("分片上传管理器已启动")
+    
     yield
     
     # 关闭时执行
     print("应用关闭中...")
+    
+    # 停止队列管理器
+    await video_queue.stop()
+    print("视频处理队列已停止")
+    
+    # 停止缓存管理器
+    await cache_manager.stop()
+    print("缓存管理器已停止")
+    
+    # 停止分片上传管理器
+    await chunked_manager.stop()
+    print("分片上传管理器已停止")
+    
     await close_db()
     print("数据库连接已关闭")
 
@@ -1730,4 +1759,458 @@ async def download_output_video(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"下载输出视频失败: {str(e)}"
+        )
+
+
+# ==================== 性能优化相关API ====================
+
+# 分片上传API
+from .chunked_upload import chunked_upload_manager
+
+
+class ChunkUploadRequest(BaseModel):
+    session_id: str
+    chunk_index: int
+
+
+@app.post("/api/upload/chunked/init")
+async def init_chunked_upload(
+    filename: str,
+    total_size: int,
+    user_id: str = "default_user"
+):
+    """
+    初始化分片上传会话
+    
+    参数:
+        filename: 文件名
+        total_size: 文件总大小（字节）
+        user_id: 用户ID
+    
+    返回:
+        dict: 会话信息
+    """
+    try:
+        if not chunked_upload_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="分片上传服务未启动"
+            )
+        
+        session_info = await chunked_upload_manager.create_session(
+            filename=filename,
+            total_size=total_size,
+            user_id=user_id
+        )
+        
+        return {
+            "success": True,
+            "data": session_info
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"初始化分片上传失败: {str(e)}"
+        )
+
+
+@app.post("/api/upload/chunked/chunk")
+async def upload_chunk(
+    session_id: str,
+    chunk_index: int,
+    chunk: FastAPIUploadFile = File(...)
+):
+    """
+    上传分片
+    
+    参数:
+        session_id: 会话ID
+        chunk_index: 分片索引
+        chunk: 分片数据
+    
+    返回:
+        dict: 上传结果
+    """
+    try:
+        if not chunked_upload_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="分片上传服务未启动"
+            )
+        
+        # 读取分片数据
+        chunk_data = await chunk.read()
+        
+        # 上传分片
+        result = await chunked_upload_manager.upload_chunk(
+            session_id=session_id,
+            chunk_index=chunk_index,
+            chunk_data=chunk_data
+        )
+        
+        return {
+            "success": True,
+            "data": result
+        }
+    
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"上传分片失败: {str(e)}"
+        )
+
+
+@app.post("/api/upload/chunked/merge")
+async def merge_chunks(
+    session_id: str,
+    user_id: str = "default_user",
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    合并分片并导入视频
+    
+    参数:
+        session_id: 会话ID
+        user_id: 用户ID
+        db: 数据库会话
+    
+    返回:
+        dict: 导入结果
+    """
+    try:
+        if not chunked_upload_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="分片上传服务未启动"
+            )
+        
+        # 合并分片
+        file_path = await chunked_upload_manager.merge_chunks(session_id)
+        
+        # 提取元数据并导入
+        from .video_import import extract_video_metadata
+        from .models import VideoFormat, VideoMetadata, VideoImportResult
+        
+        video_id = Path(file_path).stem
+        file_format = Path(file_path).suffix.lstrip('.').lower()
+        
+        metadata_dict = extract_video_metadata(file_path)
+        
+        metadata = VideoMetadata(
+            video_id=video_id,
+            format=VideoFormat(file_format),
+            resolution=metadata_dict['resolution'],
+            duration=metadata_dict['duration'],
+            codec=metadata_dict['codec'],
+            framerate=metadata_dict['framerate'],
+            bitrate=metadata_dict['bitrate'],
+            file_size=metadata_dict['file_size'],
+            created_at=datetime.now()
+        )
+        
+        # 保存到数据库
+        await create_video(
+            db=db,
+            video_id=video_id,
+            user_id=user_id,
+            format=file_format,
+            resolution_width=metadata.resolution[0],
+            resolution_height=metadata.resolution[1],
+            duration=metadata.duration,
+            codec=metadata.codec,
+            framerate=metadata.framerate,
+            bitrate=metadata.bitrate,
+            file_size=metadata.file_size,
+            storage_path=file_path,
+            import_source="chunked_upload"
+        )
+        
+        return {
+            "success": True,
+            "data": {
+                "video_id": video_id,
+                "file_size": metadata.file_size,
+                "format": file_format,
+                "resolution": {
+                    "width": metadata.resolution[0],
+                    "height": metadata.resolution[1]
+                },
+                "duration": metadata.duration,
+                "storage_path": file_path
+            }
+        }
+    
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"合并分片失败: {str(e)}"
+        )
+
+
+@app.get("/api/upload/chunked/status/{session_id}")
+async def get_chunked_upload_status(session_id: str):
+    """
+    获取分片上传状态
+    
+    参数:
+        session_id: 会话ID
+    
+    返回:
+        dict: 会话状态
+    """
+    try:
+        if not chunked_upload_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="分片上传服务未启动"
+            )
+        
+        status_info = await chunked_upload_manager.get_session_status(session_id)
+        
+        if not status_info:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"会话 {session_id} 不存在"
+            )
+        
+        return {
+            "success": True,
+            "data": status_info
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取上传状态失败: {str(e)}"
+        )
+
+
+@app.delete("/api/upload/chunked/{session_id}")
+async def cancel_chunked_upload(session_id: str):
+    """
+    取消分片上传
+    
+    参数:
+        session_id: 会话ID
+    
+    返回:
+        dict: 取消结果
+    """
+    try:
+        if not chunked_upload_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="分片上传服务未启动"
+            )
+        
+        success = await chunked_upload_manager.cancel_session(session_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"会话 {session_id} 不存在"
+            )
+        
+        return {
+            "success": True,
+            "data": {
+                "session_id": session_id,
+                "message": "上传已取消"
+            }
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"取消上传失败: {str(e)}"
+        )
+
+
+# 队列管理API
+from .queue_manager import video_queue
+
+
+@app.get("/api/queue/stats")
+async def get_queue_stats():
+    """
+    获取队列统计信息
+    
+    返回:
+        dict: 队列统计
+    """
+    try:
+        stats = await video_queue.get_queue_stats()
+        return {
+            "success": True,
+            "data": stats
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取队列统计失败: {str(e)}"
+        )
+
+
+@app.get("/api/queue/task/{task_id}")
+async def get_queue_task_status(task_id: str):
+    """
+    获取队列任务状态
+    
+    参数:
+        task_id: 任务ID
+    
+    返回:
+        dict: 任务状态
+    """
+    try:
+        task_status = await video_queue.get_task_status(task_id)
+        
+        if not task_status:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"任务 {task_id} 不存在"
+            )
+        
+        return {
+            "success": True,
+            "data": task_status
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取任务状态失败: {str(e)}"
+        )
+
+
+@app.delete("/api/queue/task/{task_id}")
+async def cancel_queue_task(task_id: str):
+    """
+    取消队列任务
+    
+    参数:
+        task_id: 任务ID
+    
+    返回:
+        dict: 取消结果
+    """
+    try:
+        success = await video_queue.cancel_task(task_id)
+        
+        if not success:
+            return {
+                "success": False,
+                "message": "任务不在队列中或已开始处理，无法取消"
+            }
+        
+        return {
+            "success": True,
+            "data": {
+                "task_id": task_id,
+                "message": "任务已取消"
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"取消任务失败: {str(e)}"
+        )
+
+
+# 缓存管理API
+from .cache_manager import cache_manager
+
+
+@app.get("/api/cache/stats")
+async def get_cache_stats():
+    """
+    获取缓存统计信息
+    
+    返回:
+        dict: 缓存统计
+    """
+    try:
+        stats = await cache_manager.get_stats()
+        return {
+            "success": True,
+            "data": stats
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取缓存统计失败: {str(e)}"
+        )
+
+
+@app.delete("/api/cache/clear")
+async def clear_cache(namespace: Optional[str] = None):
+    """
+    清空缓存
+    
+    参数:
+        namespace: 命名空间（可选），如果不提供则清空所有缓存
+    
+    返回:
+        dict: 清空结果
+    """
+    try:
+        await cache_manager.clear(namespace)
+        
+        message = f"已清空 {namespace} 缓存" if namespace else "已清空所有缓存"
+        
+        return {
+            "success": True,
+            "data": {
+                "message": message
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"清空缓存失败: {str(e)}"
+        )
+
+
+@app.delete("/api/cache/video/{video_id}")
+async def invalidate_video_cache(video_id: str):
+    """
+    使视频相关缓存失效
+    
+    参数:
+        video_id: 视频ID
+    
+    返回:
+        dict: 失效结果
+    """
+    try:
+        from .cache_manager import invalidate_video_cache as invalidate_cache
+        await invalidate_cache(video_id)
+        
+        return {
+            "success": True,
+            "data": {
+                "video_id": video_id,
+                "message": "视频缓存已失效"
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"使缓存失效失败: {str(e)}"
         )
