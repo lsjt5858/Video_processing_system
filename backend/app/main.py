@@ -2,6 +2,7 @@
 FastAPI应用入口
 """
 import os
+import uuid
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -129,7 +130,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
 # 导入视频上传模块
 from fastapi import File, UploadFile as FastAPIUploadFile
-from typing import List as TypingList
+from typing import List as TypingList, Optional
 from pydantic import BaseModel
 from .video_import import (
     upload_single_video,
@@ -419,4 +420,209 @@ async def batch_mark(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"批量标记失败: {str(e)}"
+        )
+
+
+# 导入任务处理模块
+from .task_processor import task_processor
+from . import crud
+
+
+# 定义批量去除请求模型
+class BatchRemovalRequest(BaseModel):
+    removal_tasks: TypingList[dict]  # 每个元素包含 video_id 和 regions
+    user_id: str = "default_user"
+    client_id: Optional[str] = None  # 用于WebSocket进度推送
+
+
+@app.post("/api/batch/remove")
+async def batch_remove(
+    request: BatchRemovalRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    批量执行水印去除（最多3个视频并行）
+    
+    参数:
+        request: 包含多个视频的去除任务数据
+        db: 数据库会话
+        
+    返回:
+        dict: 批量去除结果，包含job_id和初始状态
+    """
+    try:
+        # 生成批量任务ID
+        job_id = f"batch_{uuid.uuid4().hex[:12]}"
+        
+        # 准备批量任务数据
+        batch_tasks = []
+        task_ids = []
+        
+        for task_data in request.removal_tasks:
+            video_id = task_data.get("video_id")
+            regions = task_data.get("regions", [])
+            
+            # 获取视频信息
+            video = await crud.get_video_by_id(db, video_id)
+            if not video:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"视频 {video_id} 不存在"
+                )
+            
+            # 创建处理任务记录
+            task_id = f"task_{uuid.uuid4().hex[:12]}"
+            task_ids.append(task_id)
+            
+            await crud.create_processing_task(
+                db=db,
+                task_id=task_id,
+                user_id=request.user_id,
+                video_id=video_id,
+                task_type="removal",
+                status="pending",
+                parameters={
+                    "mode": "crop_reconstruct",
+                    "regions": regions,
+                    "job_id": job_id
+                }
+            )
+            
+            # 准备视频元数据
+            video_metadata = {
+                "resolution_width": video.resolution_width,
+                "resolution_height": video.resolution_height,
+                "duration": video.duration,
+                "codec": video.codec,
+                "framerate": video.framerate
+            }
+            
+            # 添加到批量任务列表
+            batch_tasks.append({
+                "task_id": task_id,
+                "video_id": video_id,
+                "video_path": video.storage_path,
+                "regions": regions,
+                "video_metadata": video_metadata
+            })
+        
+        await db.commit()
+        
+        # 如果提供了client_id，使用WebSocket推送进度
+        websocket_callback = manager.send_message if request.client_id else None
+        
+        # 异步执行批量处理（不等待完成）
+        import asyncio
+        asyncio.create_task(
+            task_processor.process_batch_removal(
+                db=db,
+                batch_tasks=batch_tasks,
+                websocket_callback=websocket_callback,
+                client_id=request.client_id
+            )
+        )
+        
+        return {
+            "success": True,
+            "data": {
+                "job_id": job_id,
+                "task_ids": task_ids,
+                "total_count": len(batch_tasks),
+                "status": "processing",
+                "message": f"批量处理已启动，共 {len(batch_tasks)} 个视频"
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"批量去除失败: {str(e)}"
+        )
+
+
+@app.get("/api/batch/{job_id}")
+async def get_batch_status(
+    job_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取批量任务状态
+    
+    参数:
+        job_id: 批量任务ID
+        db: 数据库会话
+        
+    返回:
+        dict: 批量任务状态信息
+    """
+    try:
+        # 查询所有属于该批量任务的处理任务
+        from sqlalchemy import select
+        from .database import ProcessingTask as DBProcessingTask
+        
+        stmt = select(DBProcessingTask).where(
+            DBProcessingTask.parameters.op('->>')('job_id') == job_id
+        )
+        result = await db.execute(stmt)
+        tasks = result.scalars().all()
+        
+        if not tasks:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"批量任务 {job_id} 不存在"
+            )
+        
+        # 统计任务状态
+        total_count = len(tasks)
+        completed_count = sum(1 for t in tasks if t.status == "completed")
+        failed_count = sum(1 for t in tasks if t.status == "failed")
+        processing_count = sum(1 for t in tasks if t.status == "processing")
+        pending_count = sum(1 for t in tasks if t.status == "pending")
+        
+        # 确定整体状态
+        if completed_count == total_count:
+            overall_status = "completed"
+        elif failed_count == total_count:
+            overall_status = "failed"
+        elif completed_count + failed_count == total_count:
+            overall_status = "completed_with_errors"
+        else:
+            overall_status = "processing"
+        
+        # 构建任务详情列表
+        task_details = []
+        for task in tasks:
+            task_details.append({
+                "task_id": task.task_id,
+                "video_id": task.video_id,
+                "status": task.status,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+                "started_at": task.started_at.isoformat() if task.started_at else None,
+                "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+                "error_message": task.error_message,
+                "result": task.result
+            })
+        
+        return {
+            "success": True,
+            "data": {
+                "job_id": job_id,
+                "status": overall_status,
+                "total_count": total_count,
+                "completed_count": completed_count,
+                "failed_count": failed_count,
+                "processing_count": processing_count,
+                "pending_count": pending_count,
+                "tasks": task_details
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取批量任务状态失败: {str(e)}"
         )
