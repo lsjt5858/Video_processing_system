@@ -456,3 +456,159 @@ async def mark_watermark_regions(
         if isinstance(e, (ValueError, FrameExtractionError)):
             raise
         raise FrameExtractionError(f"标记水印区域失败: {str(e)}")
+
+
+async def batch_extract_frames(
+    video_paths: List[Tuple[str, str]],
+    num_frames: int = 10
+) -> dict:
+    """
+    批量提取多个视频的预览帧
+    
+    参数:
+        video_paths: 视频路径列表，每个元素为 (video_id, video_path)
+        num_frames: 每个视频要提取的帧数量（默认10帧）
+        
+    返回:
+        dict: 批量提取结果，格式为 {
+            "total_count": 总视频数,
+            "success_count": 成功数,
+            "failed_count": 失败数,
+            "results": [
+                {
+                    "video_id": "视频ID",
+                    "status": "success" 或 "failed",
+                    "frames": [...] 或 None,
+                    "error": "错误信息" 或 None
+                }
+            ]
+        }
+    """
+    results = []
+    success_count = 0
+    failed_count = 0
+    
+    for video_id, video_path in video_paths:
+        try:
+            # 提取预览帧
+            frames = await extract_frames_for_preview(
+                video_path=video_path,
+                video_id=video_id,
+                num_frames=num_frames
+            )
+            
+            results.append({
+                "video_id": video_id,
+                "status": "success",
+                "frames": frames,
+                "error": None
+            })
+            success_count += 1
+            
+        except Exception as e:
+            results.append({
+                "video_id": video_id,
+                "status": "failed",
+                "frames": None,
+                "error": str(e)
+            })
+            failed_count += 1
+    
+    return {
+        "total_count": len(video_paths),
+        "success_count": success_count,
+        "failed_count": failed_count,
+        "results": results
+    }
+
+
+async def batch_mark_watermarks(
+    db,
+    watermark_data: List[dict]
+) -> dict:
+    """
+    批量标记多个视频的水印区域
+    
+    参数:
+        db: 数据库会话
+        watermark_data: 水印数据列表，每个元素包含:
+            - video_id: 视频ID
+            - video_path: 视频文件路径
+            - bounding_boxes: 边界框列表
+            
+    返回:
+        dict: 批量标记结果，格式为 {
+            "total_count": 总视频数,
+            "success_count": 成功数,
+            "failed_count": 失败数,
+            "results": [
+                {
+                    "video_id": "视频ID",
+                    "status": "success" 或 "failed",
+                    "regions": [...] 或 None,
+                    "error": "错误信息" 或 None
+                }
+            ]
+        }
+    """
+    results = []
+    success_count = 0
+    failed_count = 0
+    
+    for data in watermark_data:
+        video_id = data.get("video_id")
+        video_path = data.get("video_path")
+        bounding_boxes = data.get("bounding_boxes", [])
+        
+        try:
+            # 标记水印区域
+            regions = await mark_watermark_regions(
+                db=db,
+                video_id=video_id,
+                video_path=video_path,
+                bounding_boxes=bounding_boxes
+            )
+            
+            # 转换为字典格式
+            regions_dict = [
+                {
+                    "region_id": r.region_id,
+                    "video_id": r.video_id,
+                    "bbox": {
+                        "x": r.bbox.x,
+                        "y": r.bbox.y,
+                        "width": r.bbox.width,
+                        "height": r.bbox.height
+                    },
+                    "start_time": r.start_time,
+                    "end_time": r.end_time,
+                    "confidence": r.confidence,
+                    "watermark_type": r.watermark_type,
+                    "detection_method": r.detection_method
+                }
+                for r in regions
+            ]
+            
+            results.append({
+                "video_id": video_id,
+                "status": "success",
+                "regions": regions_dict,
+                "error": None
+            })
+            success_count += 1
+            
+        except Exception as e:
+            results.append({
+                "video_id": video_id,
+                "status": "failed",
+                "regions": None,
+                "error": str(e)
+            })
+            failed_count += 1
+    
+    return {
+        "total_count": len(watermark_data),
+        "success_count": success_count,
+        "failed_count": failed_count,
+        "results": results
+    }

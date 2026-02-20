@@ -290,3 +290,133 @@ async def download_video(request: VideoDownloadRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"下载失败: {str(e)}"
         )
+
+
+# 导入水印检测模块
+from .watermark_detection import (
+    batch_extract_frames,
+    batch_mark_watermarks,
+    FrameExtractionError
+)
+from .database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import Depends
+
+
+# 定义批量检测请求模型
+class BatchDetectRequest(BaseModel):
+    video_ids: TypingList[str]
+    num_frames: int = 10
+
+
+@app.post("/api/batch/detect")
+async def batch_detect(
+    request: BatchDetectRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    批量检测水印（提取所有视频的预览帧）
+    
+    参数:
+        request: 包含视频ID列表和帧数的请求体
+        db: 数据库会话
+        
+    返回:
+        dict: 批量检测结果，包含所有视频的预览帧
+    """
+    try:
+        from . import crud
+        
+        # 获取所有视频的路径
+        video_paths = []
+        for video_id in request.video_ids:
+            video = await crud.get_video_by_id(db, video_id)
+            if video:
+                video_paths.append((video_id, video.storage_path))
+        
+        if not video_paths:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="未找到任何有效的视频"
+            )
+        
+        # 批量提取预览帧
+        results = await batch_extract_frames(
+            video_paths=video_paths,
+            num_frames=request.num_frames
+        )
+        
+        return {
+            "success": True,
+            "data": results
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"批量检测失败: {str(e)}"
+        )
+
+
+# 定义批量标记请求模型
+class BatchMarkRequest(BaseModel):
+    watermark_data: TypingList[dict]  # 每个元素包含 video_id 和 bounding_boxes
+
+
+@app.post("/api/batch/mark")
+async def batch_mark(
+    request: BatchMarkRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    批量标记水印区域
+    
+    参数:
+        request: 包含多个视频的水印标记数据
+        db: 数据库会话
+        
+    返回:
+        dict: 批量标记结果
+    """
+    try:
+        from . import crud
+        
+        # 为每个视频添加video_path
+        enriched_data = []
+        for data in request.watermark_data:
+            video_id = data.get("video_id")
+            video = await crud.get_video_by_id(db, video_id)
+            
+            if not video:
+                enriched_data.append({
+                    "video_id": video_id,
+                    "video_path": None,
+                    "bounding_boxes": data.get("bounding_boxes", [])
+                })
+            else:
+                enriched_data.append({
+                    "video_id": video_id,
+                    "video_path": video.storage_path,
+                    "bounding_boxes": data.get("bounding_boxes", [])
+                })
+        
+        # 批量标记水印
+        results = await batch_mark_watermarks(
+            db=db,
+            watermark_data=enriched_data
+        )
+        
+        return {
+            "success": True,
+            "data": results
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"批量标记失败: {str(e)}"
+        )
