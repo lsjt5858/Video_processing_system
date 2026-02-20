@@ -19,6 +19,14 @@ function createWindow() {
     icon: path.join(__dirname, '../public/icon.png'),
     title: '一键美',
     backgroundColor: '#f0f2f5',
+    frame: true,
+    titleBarStyle: 'default',
+    show: false, // 先不显示，等加载完成后再显示
+  })
+
+  // 窗口加载完成后显示，避免白屏
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show()
   })
 
   // 开发环境加载 Vite 开发服务器

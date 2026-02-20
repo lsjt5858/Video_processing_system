@@ -1,0 +1,260 @@
+/* 桌面客户端专用样式 */
+
+/* 全局布局 */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 禁用文本选择（可选，让应用更像原生应用） */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* 允许输入框和可编辑内容选择文本 */
+input, textarea, [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* 自定义滚动条 - macOS 风格 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+  background-clip: content-box;
+}
+
+/* 窗口拖拽区域（macOS 风格） */
+.window-drag {
+  -webkit-app-region: drag;
+}
+
+.window-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* 卡片样式优化 */
+.ant-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+}
+
+.ant-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* 按钮样式优化 */
+.ant-btn {
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.ant-btn-primary {
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.3);
+}
+
+.ant-btn-primary:hover {
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+/* 输入框样式优化 */
+.ant-input,
+.ant-input-number,
+.ant-select-selector,
+.ant-picker {
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.ant-input:focus,
+.ant-input-number:focus,
+.ant-select-focused .ant-select-selector {
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+}
+
+/* 表格样式优化 */
+.ant-table {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.ant-table-thead > tr > th {
+  background: linear-gradient(to bottom, #fafafa, #f5f5f5);
+  font-weight: 600;
+  border-bottom: 2px solid #e8e8e8;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: #f5f9ff;
+}
+
+/* 模态框样式优化 */
+.ant-modal-content {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.ant-modal-header {
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(to right, #1890ff, #096dd9);
+  color: white;
+}
+
+.ant-modal-title {
+  color: white;
+}
+
+.ant-modal-close {
+  color: white;
+}
+
+.ant-modal-close:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* 上传组件样式优化 */
+.ant-upload-drag {
+  border-radius: 12px;
+  border: 2px dashed #d9d9d9;
+  background: #fafafa;
+  transition: all 0.3s ease;
+}
+
+.ant-upload-drag:hover {
+  border-color: #1890ff;
+  background: #f5f9ff;
+}
+
+.ant-upload-drag-icon {
+  font-size: 48px;
+  color: #1890ff;
+}
+
+/* 进度条样式优化 */
+.ant-progress-line {
+  border-radius: 8px;
+}
+
+.ant-progress-bg {
+  border-radius: 8px;
+  background: linear-gradient(to right, #1890ff, #096dd9);
+}
+
+/* 标签页样式优化 */
+.ant-tabs-tab {
+  border-radius: 8px 8px 0 0;
+  transition: all 0.3s ease;
+}
+
+.ant-tabs-tab:hover {
+  background: #f5f9ff;
+}
+
+.ant-tabs-tab-active {
+  background: white;
+}
+
+/* 消息提示样式优化 */
+.ant-message-notice-content {
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 通知样式优化 */
+.ant-notification-notice {
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* 加载动画优化 */
+.ant-spin-dot-item {
+  background-color: #1890ff;
+}
+
+/* 空状态样式优化 */
+.ant-empty-description {
+  color: #999;
+  font-size: 14px;
+}
+
+/* 响应式布局 */
+@media (max-width: 1200px) {
+  .ant-layout-sider {
+    width: 180px !important;
+  }
+}
+
+/* 深色模式支持（可选） */
+@media (prefers-color-scheme: dark) {
+  /* 可以在这里添加深色模式样式 */
+}
+
+/* 动画效果 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease;
+}
+
+/* 页面过渡效果 */
+.page-transition-enter {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.page-transition-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: all 0.3s ease;
+}
+
+.page-transition-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.page-transition-exit-active {
+  opacity: 0;
+  transform: translateX(-20px);
+  transition: all 0.3s ease;
+}

@@ -15,17 +15,14 @@ import {
 } from 'antd'
 import { 
   PlusOutlined, 
-  EyeOutlined, 
-  DeleteOutlined, 
   ReloadOutlined,
-  EditOutlined,
-  ScissorOutlined,
   ClearOutlined
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import type { Video, VideoFormat } from '@/types'
 import { useVideoList } from '@/hooks/useVideoList'
 import VideoThumbnail from '@/components/VideoThumbnail'
+import ActionButtons from '@/components/ActionButtons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs, { Dayjs } from 'dayjs'
 
@@ -211,65 +208,46 @@ const VideoList: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 280,
+      width: 180,
       fixed: 'right',
-      render: (_, record) => (
-        <Space size="small">
-          <Button 
-            type="link" 
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => navigate(`/watermark-marker/${record.video_id}`)}
-          >
-            查看详情
-          </Button>
-          <Button 
-            type="link" 
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => navigate(`/watermark-marker/${record.video_id}`)}
-          >
-            标记水印
-          </Button>
-          <Button 
-            type="link" 
-            size="small"
-            icon={<ScissorOutlined />}
-            onClick={() => navigate(`/watermark-removal/${record.video_id}`)}
-          >
-            去除水印
-          </Button>
-          <Button 
-            type="link" 
-            size="small"
-            danger 
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record.video_id, record.storage_path.split('/').pop() || record.video_id)}
-          >
-            删除
-          </Button>
-        </Space>
-      ),
+      render: (_, record) => {
+        const filename = record.storage_path.split('/').pop() || record.video_id
+        
+        return (
+          <ActionButtons
+            videoId={record.video_id}
+            filename={filename}
+            onView={() => navigate(`/watermark-marker/${record.video_id}`)}
+            onMark={() => navigate(`/watermark-marker/${record.video_id}`)}
+            onRemove={() => navigate(`/watermark-removal/${record.video_id}`)}
+            onDelete={() => handleDelete(record.video_id, filename)}
+            compact={true}
+          />
+        )
+      },
     },
   ]
 
   const filteredVideos = getFilteredVideos()
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div className="page-container">
       <Card 
         title={
-          <Space>
-            <span>视频列表</span>
-            <Tag color="blue">{total} 个视频</Tag>
+          <Space size="middle">
+            <span style={{ fontSize: '18px', fontWeight: 600 }}>视频列表</span>
+            <Tag color="blue" style={{ fontSize: '14px', padding: '4px 12px' }}>
+              {total} 个视频
+            </Tag>
           </Space>
         }
         extra={
-          <Space>
+          <Space size="middle">
             <Button 
               icon={<ReloadOutlined />}
               onClick={refreshVideos}
               loading={loading}
+              size="middle"
             >
               刷新
             </Button>
@@ -277,49 +255,62 @@ const VideoList: React.FC = () => {
               type="primary" 
               icon={<PlusOutlined />}
               onClick={() => navigate('/upload')}
+              size="middle"
+              style={{
+                background: 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)',
+                border: 'none',
+                boxShadow: '0 2px 8px rgba(24, 144, 255, 0.3)',
+              }}
             >
               上传视频
             </Button>
           </Space>
         }
+        bordered={false}
+        style={{
+          borderRadius: '12px',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+        }}
       >
         {/* 搜索和筛选区域 */}
-        <Space direction="vertical" size="middle" style={{ width: '100%', marginBottom: 16 }}>
-          <Space wrap>
-            <Search
-              placeholder="搜索文件名或视频ID"
-              allowClear
-              style={{ width: 300 }}
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              onSearch={(value) => setSearchText(value)}
-            />
-            <Select
-              placeholder="选择格式"
-              allowClear
-              style={{ width: 150 }}
-              value={formatFilter}
-              onChange={(value) => setFormatFilter(value)}
-              options={[
-                { label: 'MP4', value: 'mp4' },
-                { label: 'AVI', value: 'avi' },
-                { label: 'MOV', value: 'mov' },
-                { label: 'MKV', value: 'mkv' },
-              ]}
-            />
-            <RangePicker
-              placeholder={['开始日期', '结束日期']}
-              value={dateRange}
-              onChange={(dates) => setDateRange(dates as [Dayjs, Dayjs] | null)}
-            />
-            <Button 
-              icon={<ClearOutlined />}
-              onClick={handleClearFilters}
-            >
-              清除筛选
-            </Button>
-          </Space>
-        </Space>
+        <div className="search-bar">
+          <Search
+            placeholder="搜索文件名或视频ID"
+            allowClear
+            style={{ flex: 1, minWidth: 250 }}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            onSearch={(value) => setSearchText(value)}
+            size="large"
+          />
+          <Select
+            placeholder="选择格式"
+            allowClear
+            style={{ width: 150 }}
+            value={formatFilter}
+            onChange={(value) => setFormatFilter(value)}
+            size="large"
+            options={[
+              { label: 'MP4', value: 'mp4' },
+              { label: 'AVI', value: 'avi' },
+              { label: 'MOV', value: 'mov' },
+              { label: 'MKV', value: 'mkv' },
+            ]}
+          />
+          <RangePicker
+            placeholder={['开始日期', '结束日期']}
+            value={dateRange}
+            onChange={(dates) => setDateRange(dates as [Dayjs, Dayjs] | null)}
+            size="large"
+          />
+          <Button 
+            icon={<ClearOutlined />}
+            onClick={handleClearFilters}
+            size="large"
+          >
+            清除筛选
+          </Button>
+        </div>
 
         {/* 视频列表表格 */}
         {loading ? (
