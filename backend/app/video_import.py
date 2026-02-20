@@ -23,7 +23,6 @@ from .database import get_db
 from .crud import create_video
 
 
-# 导入错误类
 from .errors import (
     FileSizeExceededError,
     UnsupportedFormatError,
@@ -48,6 +47,43 @@ MAX_BATCH_SIZE = 50
 # 获取上传目录
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
+
+
+def validate_url(url: str) -> None:
+    """
+    验证URL有效性
+    
+    参数:
+        url: 视频链接
+        
+    异常:
+        InvalidUrlError: URL无效
+    """
+    if not url or not url.strip():
+        raise InvalidUrlError("", "URL不能为空")
+    
+    url = url.strip()
+    
+    # 基本URL格式验证
+    if not url.startswith(('http://', 'https://')):
+        raise InvalidUrlError(url, "URL必须以http://或https://开头")
+    
+    # 检查URL长度
+    if len(url) > 2048:
+        raise InvalidUrlError(url, "URL长度超过限制（2048字符）")
+    
+    # 检查是否包含空格
+    if ' ' in url:
+        raise InvalidUrlError(url, "URL不能包含空格")
+    
+    # 简单的域名验证
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        if not parsed.netloc:
+            raise InvalidUrlError(url, "URL格式无效：缺少域名")
+    except Exception as e:
+        raise InvalidUrlError(url, f"URL解析失败: {str(e)}")
 
 
 def validate_video_format(filename: str) -> str:
@@ -101,8 +137,18 @@ def extract_video_metadata(video_path: str) -> Dict[str, Any]:
         
     异常:
         MetadataExtractionError: 元数据提取失败
+        CorruptedVideoError: 视频文件损坏
     """
     try:
+        # 验证文件存在
+        if not Path(video_path).exists():
+            raise MetadataExtractionError(video_path, "文件不存在")
+        
+        # 验证文件大小
+        file_size = Path(video_path).stat().st_size
+        if file_size == 0:
+            raise CorruptedVideoError(video_path, "文件大小为0")
+        
         # 使用ffprobe提取视频信息
         cmd = [
             'ffprobe',
@@ -121,12 +167,16 @@ def extract_video_metadata(video_path: str) -> Dict[str, Any]:
         )
         
         if result.returncode != 0:
-            raise MetadataExtractionError(
-                f"FFprobe执行失败: {result.stderr}"
-            )
+            stderr = result.stderr or "未知错误"
+            if "Invalid data found" in stderr or "moov atom not found" in stderr:
+                raise CorruptedVideoError(video_path, stderr)
+            raise MetadataExtractionError(video_path, f"FFprobe执行失败: {stderr}")
         
         # 解析JSON输出
-        probe_data = json.loads(result.stdout)
+        try:
+            probe_data = json.loads(result.stdout)
+        except json.JSONDecodeError as e:
+            raise MetadataExtractionError(video_path, f"解析FFprobe输出失败: {str(e)}")
         
         # 查找视频流
         video_stream = None
@@ -136,7 +186,7 @@ def extract_video_metadata(video_path: str) -> Dict[str, Any]:
                 break
         
         if not video_stream:
-            raise MetadataExtractionError("未找到视频流")
+            raise CorruptedVideoError(video_path, "未找到视频流")
         
         # 提取元数据
         format_info = probe_data.get('format', {})
@@ -176,11 +226,11 @@ def extract_video_metadata(video_path: str) -> Dict[str, Any]:
         
         # 验证必需字段
         if width == 0 or height == 0:
-            raise MetadataExtractionError("无法提取视频分辨率")
+            raise CorruptedVideoError(video_path, "无法提取视频分辨率")
         if duration == 0:
-            raise MetadataExtractionError("无法提取视频时长")
+            raise CorruptedVideoError(video_path, "无法提取视频时长")
         if framerate == 0:
-            raise MetadataExtractionError("无法提取视频帧率")
+            raise MetadataExtractionError(video_path, "无法提取视频帧率")
         
         return {
             'resolution': (width, height),
@@ -192,11 +242,13 @@ def extract_video_metadata(video_path: str) -> Dict[str, Any]:
         }
         
     except subprocess.TimeoutExpired:
-        raise MetadataExtractionError("元数据提取超时")
-    except json.JSONDecodeError as e:
-        raise MetadataExtractionError(f"解析FFprobe输出失败: {str(e)}")
+        raise MetadataExtractionError(video_path, "元数据提取超时（30秒）")
+    except (CorruptedVideoError, MetadataExtractionError):
+        # 重新抛出已知错误
+        raise
     except Exception as e:
-        raise MetadataExtractionError(f"元数据提取失败: {str(e)}")
+        log_error(e, {"video_path": video_path, "operation": "extract_metadata"})
+        raise MetadataExtractionError(video_path, str(e))
 
 
 async def save_upload_file(upload_file: UploadFile) -> tuple[str, int]:
@@ -574,6 +626,9 @@ async def download_video_from_url(
         UnsupportedFormatError: 不支持的视频格式
         MetadataExtractionError: 元数据提取失败
     """
+    # 验证URL
+    validate_url(url)
+    
     # 生成唯一视频ID
     video_id = str(uuid.uuid4())
     

@@ -24,6 +24,15 @@ import { useNavigate } from 'react-router-dom'
 import type { UploadFile, UploadProps } from 'antd'
 import { uploadVideo, batchUploadVideos, downloadVideoFromUrl } from '@/services/api'
 import { useWebSocket } from '@/hooks/useWebSocket'
+import { 
+  validateFileSize, 
+  validateFileFormat, 
+  validateUrl, 
+  validateFiles,
+  handleApiError,
+  showErrorMessage,
+  showErrorNotification
+} from '@/utils/errorHandler'
 
 const { Dragger } = Upload
 const { Text } = Typography
@@ -94,10 +103,20 @@ const VideoUpload: React.FC = () => {
     )
   }
 
-  // 文件验证
+  // 文件验证（使用新的错误处理工具）
   const validateFile = (file: File): boolean => {
-    const validFormats = ['video/mp4', 'video/x-msvideo', 'video/quicktime', 'video/x-matroska']
-    const validExtensions = ['.mp4', '.avi', '.mov', '.mkv']
+    // 验证文件大小
+    if (!validateFileSize(file, 5)) {
+      return false
+    }
+    
+    // 验证文件格式
+    if (!validateFileFormat(file, ['mp4', 'avi', 'mov', 'mkv'])) {
+      return false
+    }
+    
+    return true
+  }
     const maxSize = 5 * 1024 * 1024 * 1024 // 5GB
 
     // 检查文件格式

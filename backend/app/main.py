@@ -135,11 +135,18 @@ from pydantic import BaseModel
 from .video_import import (
     upload_single_video,
     upload_batch_videos,
-    download_video_from_url,
+    download_video_from_url
+)
+from .errors import (
+    VideoProcessingError,
     FileSizeExceededError,
     UnsupportedFormatError,
     InvalidUrlError,
-    VideoNotAccessibleError
+    VideoNotAccessibleError,
+    CorruptedVideoError,
+    MetadataExtractionError,
+    create_error_response,
+    log_error
 )
 
 
@@ -167,24 +174,26 @@ async def upload_video(
                 "filename": file.filename,
                 "file_size": result.metadata.file_size,
                 "format": result.metadata.format,
+                "resolution": {
+                    "width": result.metadata.resolution[0],
+                    "height": result.metadata.resolution[1]
+                },
+                "duration": result.metadata.duration,
                 "storage_path": result.storage_path,
                 "import_time": result.import_time.isoformat()
             }
         }
-    except FileSizeExceededError as e:
+    except VideoProcessingError as e:
+        log_error(e, {"operation": "upload_video", "filename": file.filename})
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=str(e)
-        )
-    except UnsupportedFormatError as e:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=str(e)
+            status_code=e.status_code,
+            detail=e.to_dict()
         )
     except Exception as e:
+        log_error(e, {"operation": "upload_video", "filename": file.filename})
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"上传失败: {str(e)}"
+            detail=create_error_response(e)
         )
 
 
@@ -265,31 +274,26 @@ async def download_video(request: VideoDownloadRequest):
                 "url": request.url,
                 "file_size": result.metadata.file_size,
                 "format": result.metadata.format,
-                "resolution": result.metadata.resolution,
+                "resolution": {
+                    "width": result.metadata.resolution[0],
+                    "height": result.metadata.resolution[1]
+                },
                 "duration": result.metadata.duration,
                 "storage_path": result.storage_path,
                 "import_time": result.import_time.isoformat()
             }
         }
-    except InvalidUrlError as e:
+    except VideoProcessingError as e:
+        log_error(e, {"operation": "download_video", "url": request.url})
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except VideoNotAccessibleError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
-    except UnsupportedFormatError as e:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=str(e)
+            status_code=e.status_code,
+            detail=e.to_dict()
         )
     except Exception as e:
+        log_error(e, {"operation": "download_video", "url": request.url})
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"下载失败: {str(e)}"
+            detail=create_error_response(e)
         )
 
 

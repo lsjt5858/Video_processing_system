@@ -12,16 +12,12 @@ from typing import List, Tuple, Optional
 from datetime import datetime
 
 from .models import WatermarkRegion, BoundingBox, DetectionResult
+from .errors import FrameExtractionError, CorruptedVideoError, log_error
 
 
 # 获取项目根目录
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 THUMBNAIL_DIR = BASE_DIR / "thumbnails"
-
-
-class FrameExtractionError(Exception):
-    """帧提取错误"""
-    pass
 
 
 async def extract_key_frames(

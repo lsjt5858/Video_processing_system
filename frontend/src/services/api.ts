@@ -1,10 +1,11 @@
 import axios, { AxiosInstance, AxiosError } from 'axios'
 import type { ApiResponse, Video, ProcessingTask } from '@/types'
+import { logError, handleApiError } from '@/utils/errorHandler'
 
 // 创建 axios 实例
 const api: AxiosInstance = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  timeout: 60000, // 增加到60秒，处理大文件上传
   headers: {
     'Content-Type': 'application/json',
   },
@@ -21,6 +22,7 @@ api.interceptors.request.use(
     return config
   },
   (error) => {
+    logError(error, { stage: 'request' })
     return Promise.reject(error)
   }
 )
@@ -36,9 +38,8 @@ api.interceptors.response.use(
     return response.data
   },
   (error: AxiosError<ApiResponse>) => {
-    // 统一错误处理
-    const errorMessage = error.response?.data?.error?.message || error.message || '请求失败'
-    console.error('API Error:', errorMessage)
+    // 记录错误但不显示消息（由调用者决定如何显示）
+    logError(error, { stage: 'response' })
     return Promise.reject(error)
   }
 )
