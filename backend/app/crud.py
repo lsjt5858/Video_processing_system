@@ -157,6 +157,22 @@ async def get_videos_count_by_user(db: AsyncSession, user_id: str) -> int:
     return result.scalar_one()
 
 
+async def get_all_videos_count(db: AsyncSession) -> int:
+    """
+    获取所有视频的总数
+    
+    参数:
+        db: 数据库会话
+    
+    返回:
+        int: 视频总数
+    """
+    result = await db.execute(
+        select(func.count(Video.video_id))
+    )
+    return result.scalar_one()
+
+
 async def get_all_videos(
     db: AsyncSession,
     skip: int = 0,

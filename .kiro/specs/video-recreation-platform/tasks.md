@@ -131,8 +131,8 @@
     - 返回处理结果和文件路径
     - 提供视频下载接口
 
-- [ ] 6. 实现API端点
-  - [ ] 6.1 视频导入API
+- [x] 6. 实现API端点
+  - [x] 6.1 视频导入API
     - POST /api/videos/upload - 上传单个视频
     - POST /api/videos/batch-upload - 批量上传视频
     - POST /api/videos/download - 通过URL下载视频
@@ -140,7 +140,7 @@
     - GET /api/videos/{video_id} - 获取视频详情
     - DELETE /api/videos/{video_id} - 删除视频
     
-  - [ ] 6.2 水印检测API
+  - [x] 6.2 水印检测API
     - GET /api/videos/{video_id}/frames - 获取视频帧
     - POST /api/videos/{video_id}/watermarks - 标记水印区域
     - GET /api/videos/{video_id}/watermarks - 获取水印区域列表
@@ -148,21 +148,21 @@
     - DELETE /api/videos/{video_id}/watermarks/{region_id} - 删除水印区域
     - POST /api/batch/detect - 批量检测（返回所有视频的预览帧）
     
-  - [ ] 6.3 水印去除API
+  - [x] 6.3 水印去除API
     - POST /api/videos/{video_id}/remove - 执行单个视频水印去除
     - POST /api/batch/remove - 批量执行水印去除
     - GET /api/tasks/{task_id} - 获取任务状态
     - GET /api/tasks - 获取任务列表
     - GET /api/videos/{video_id}/output - 下载处理后的视频
     
-  - [ ] 6.4 WebSocket端点
+  - [x] 6.4 WebSocket端点
     - WS /ws/{client_id} - WebSocket连接
     - 推送上传进度
     - 推送下载进度
     - 推送处理进度
     - 推送任务完成通知
 
-- [ ] 7. 搭建前端项目
+- [-] 7. 搭建前端项目
   - [ ] 7.1 创建React + Vite项目
     - 使用Vite创建React + TypeScript项目
     - 安装Ant Design UI组件库

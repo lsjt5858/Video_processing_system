@@ -423,6 +423,430 @@ async def batch_mark(
         )
 
 
+@app.get("/api/videos/{video_id}/frames")
+async def get_video_frames(
+    video_id: str,
+    num_frames: int = 10,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取视频帧（用于水印标记）
+    
+    参数:
+        video_id: 视频ID
+        num_frames: 要提取的帧数量（默认10帧）
+        db: 数据库会话
+        
+    返回:
+        dict: 包含视频帧信息的响应
+    """
+    try:
+        from .watermark_detection import extract_frames_for_preview
+        
+        # 获取视频信息
+        video = await crud.get_video_by_id(db, video_id)
+        
+        if not video:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"视频 {video_id} 不存在"
+            )
+        
+        # 提取视频帧
+        frames = await extract_frames_for_preview(
+            video_path=video.storage_path,
+            video_id=video_id,
+            num_frames=num_frames
+        )
+        
+        return {
+            "success": True,
+            "data": {
+                "video_id": video_id,
+                "num_frames": len(frames),
+                "frames": frames
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except FrameExtractionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"提取视频帧失败: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取视频帧失败: {str(e)}"
+        )
+
+
+# 定义水印标记请求模型
+class WatermarkMarkRequest(BaseModel):
+    bounding_boxes: TypingList[dict]  # 边界框列表
+
+
+@app.post("/api/videos/{video_id}/watermarks")
+async def mark_video_watermarks(
+    video_id: str,
+    request: WatermarkMarkRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    标记视频的水印区域
+    
+    参数:
+        video_id: 视频ID
+        request: 包含边界框数据的请求体
+        db: 数据库会话
+        
+    返回:
+        dict: 标记结果
+    """
+    try:
+        from .watermark_detection import mark_watermark_regions
+        
+        # 获取视频信息
+        video = await crud.get_video_by_id(db, video_id)
+        
+        if not video:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"视频 {video_id} 不存在"
+            )
+        
+        # 标记水印区域
+        regions = await mark_watermark_regions(
+            db=db,
+            video_id=video_id,
+            video_path=video.storage_path,
+            bounding_boxes=request.bounding_boxes
+        )
+        
+        await db.commit()
+        
+        # 转换为响应格式
+        regions_data = []
+        for region in regions:
+            regions_data.append({
+                "region_id": region.region_id,
+                "video_id": region.video_id,
+                "bbox": {
+                    "x": region.bbox_x,
+                    "y": region.bbox_y,
+                    "width": region.bbox_width,
+                    "height": region.bbox_height
+                },
+                "start_time": region.start_time,
+                "end_time": region.end_time,
+                "confidence": region.confidence,
+                "watermark_type": region.watermark_type,
+                "detection_method": region.detection_method,
+                "created_at": region.created_at.isoformat() if region.created_at else None
+            })
+        
+        return {
+            "success": True,
+            "data": {
+                "video_id": video_id,
+                "regions": regions_data,
+                "count": len(regions_data)
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"标记水印区域失败: {str(e)}"
+        )
+
+
+@app.get("/api/videos/{video_id}/watermarks")
+async def get_video_watermarks(
+    video_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取视频的所有水印区域
+    
+    参数:
+        video_id: 视频ID
+        db: 数据库会话
+        
+    返回:
+        dict: 水印区域列表
+    """
+    try:
+        # 验证视频是否存在
+        video = await crud.get_video_by_id(db, video_id)
+        
+        if not video:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"视频 {video_id} 不存在"
+            )
+        
+        # 获取水印区域
+        regions = await crud.get_watermark_regions_by_video(db, video_id)
+        
+        # 转换为响应格式
+        regions_data = []
+        for region in regions:
+            regions_data.append({
+                "region_id": region.region_id,
+                "video_id": region.video_id,
+                "bbox": {
+                    "x": region.bbox_x,
+                    "y": region.bbox_y,
+                    "width": region.bbox_width,
+                    "height": region.bbox_height
+                },
+                "start_time": region.start_time,
+                "end_time": region.end_time,
+                "confidence": region.confidence,
+                "watermark_type": region.watermark_type,
+                "detection_method": region.detection_method,
+                "created_at": region.created_at.isoformat() if region.created_at else None
+            })
+        
+        return {
+            "success": True,
+            "data": {
+                "video_id": video_id,
+                "regions": regions_data,
+                "count": len(regions_data)
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取水印区域失败: {str(e)}"
+        )
+
+
+# 定义水印更新请求模型
+class WatermarkUpdateRequest(BaseModel):
+    bbox: Optional[dict] = None  # 新的边界框
+    start_time: Optional[float] = None
+    end_time: Optional[float] = None
+    watermark_type: Optional[str] = None
+
+
+@app.put("/api/videos/{video_id}/watermarks/{region_id}")
+async def update_video_watermark(
+    video_id: str,
+    region_id: str,
+    request: WatermarkUpdateRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    更新水印区域
+    
+    参数:
+        video_id: 视频ID
+        region_id: 水印区域ID
+        request: 包含更新数据的请求体
+        db: 数据库会话
+        
+    返回:
+        dict: 更新后的水印区域
+    """
+    try:
+        # 验证视频是否存在
+        video = await crud.get_video_by_id(db, video_id)
+        
+        if not video:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"视频 {video_id} 不存在"
+            )
+        
+        # 获取水印区域
+        region = await crud.get_watermark_region_by_id(db, region_id)
+        
+        if not region:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"水印区域 {region_id} 不存在"
+            )
+        
+        # 验证区域是否属于该视频
+        if region.video_id != video_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"水印区域 {region_id} 不属于视频 {video_id}"
+            )
+        
+        # 准备更新数据
+        update_data = {}
+        
+        if request.bbox is not None:
+            # 验证边界框
+            from .watermark_detection import validate_bounding_box
+            from .models import BoundingBox
+            
+            bbox = BoundingBox(
+                x=request.bbox.get("x", region.bbox_x),
+                y=request.bbox.get("y", region.bbox_y),
+                width=request.bbox.get("width", region.bbox_width),
+                height=request.bbox.get("height", region.bbox_height)
+            )
+            
+            if not await validate_bounding_box(bbox, video.resolution_width, video.resolution_height):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="无效的边界框坐标"
+                )
+            
+            update_data["bbox_x"] = bbox.x
+            update_data["bbox_y"] = bbox.y
+            update_data["bbox_width"] = bbox.width
+            update_data["bbox_height"] = bbox.height
+        
+        if request.start_time is not None:
+            if request.start_time < 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="开始时间不能为负数"
+                )
+            update_data["start_time"] = request.start_time
+        
+        if request.end_time is not None:
+            if request.end_time <= (request.start_time if request.start_time is not None else region.start_time):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="结束时间必须大于开始时间"
+                )
+            update_data["end_time"] = request.end_time
+        
+        if request.watermark_type is not None:
+            valid_types = ["corner", "rolling", "logo", "subtitle", "manual"]
+            if request.watermark_type not in valid_types:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"无效的水印类型，必须是以下之一: {', '.join(valid_types)}"
+                )
+            update_data["watermark_type"] = request.watermark_type
+        
+        # 更新水印区域
+        updated_region = await crud.update_watermark_region(db, region_id, **update_data)
+        await db.commit()
+        
+        return {
+            "success": True,
+            "data": {
+                "region_id": updated_region.region_id,
+                "video_id": updated_region.video_id,
+                "bbox": {
+                    "x": updated_region.bbox_x,
+                    "y": updated_region.bbox_y,
+                    "width": updated_region.bbox_width,
+                    "height": updated_region.bbox_height
+                },
+                "start_time": updated_region.start_time,
+                "end_time": updated_region.end_time,
+                "confidence": updated_region.confidence,
+                "watermark_type": updated_region.watermark_type,
+                "detection_method": updated_region.detection_method,
+                "created_at": updated_region.created_at.isoformat() if updated_region.created_at else None
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"更新水印区域失败: {str(e)}"
+        )
+
+
+@app.delete("/api/videos/{video_id}/watermarks/{region_id}")
+async def delete_video_watermark(
+    video_id: str,
+    region_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    删除水印区域
+    
+    参数:
+        video_id: 视频ID
+        region_id: 水印区域ID
+        db: 数据库会话
+        
+    返回:
+        dict: 删除结果
+    """
+    try:
+        # 验证视频是否存在
+        video = await crud.get_video_by_id(db, video_id)
+        
+        if not video:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"视频 {video_id} 不存在"
+            )
+        
+        # 获取水印区域
+        region = await crud.get_watermark_region_by_id(db, region_id)
+        
+        if not region:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"水印区域 {region_id} 不存在"
+            )
+        
+        # 验证区域是否属于该视频
+        if region.video_id != video_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"水印区域 {region_id} 不属于视频 {video_id}"
+            )
+        
+        # 删除水印区域
+        success = await crud.delete_watermark_region(db, region_id)
+        await db.commit()
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="删除水印区域失败"
+            )
+        
+        return {
+            "success": True,
+            "data": {
+                "video_id": video_id,
+                "region_id": region_id,
+                "message": "水印区域已成功删除"
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"删除水印区域失败: {str(e)}"
+        )
+
+
 # 导入任务处理模块
 from .task_processor import task_processor
 from . import crud
@@ -540,6 +964,113 @@ async def batch_remove(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"批量去除失败: {str(e)}"
         )
+# 定义单个视频去除请求模型
+class SingleRemovalRequest(BaseModel):
+    regions: TypingList[dict]  # 水印区域列表
+    mode: str = "crop_reconstruct"  # 处理模式：crop_reconstruct, ai_inpainting, blur_replace
+    user_id: str = "default_user"
+    client_id: Optional[str] = None  # 用于WebSocket进度推送
+
+
+@app.post("/api/videos/{video_id}/remove")
+async def remove_single_video(
+    video_id: str,
+    request: SingleRemovalRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    执行单个视频水印去除
+
+    参数:
+        video_id: 视频ID
+        request: 包含水印区域和处理参数的请求体
+        db: 数据库会话
+
+    返回:
+        dict: 任务信息，包含task_id用于状态跟踪
+    """
+    try:
+        # 获取视频信息
+        video = await crud.get_video_by_id(db, video_id)
+        if not video:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"视频 {video_id} 不存在"
+            )
+
+        # 验证处理模式
+        valid_modes = ["crop_reconstruct", "ai_inpainting", "blur_replace"]
+        if request.mode not in valid_modes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"无效的处理模式，必须是以下之一: {', '.join(valid_modes)}"
+            )
+
+        # 创建处理任务记录
+        task_id = f"task_{uuid.uuid4().hex[:12]}"
+
+        await crud.create_processing_task(
+            db=db,
+            task_id=task_id,
+            user_id=request.user_id,
+            video_id=video_id,
+            task_type="removal",
+            status="pending",
+            parameters={
+                "mode": request.mode,
+                "regions": request.regions
+            }
+        )
+
+        await db.commit()
+
+        # 准备视频元数据
+        video_metadata = {
+            "resolution_width": video.resolution_width,
+            "resolution_height": video.resolution_height,
+            "duration": video.duration,
+            "codec": video.codec,
+            "framerate": video.framerate
+        }
+
+        # 如果提供了client_id，使用WebSocket推送进度
+        websocket_callback = manager.send_message if request.client_id else None
+
+        # 异步执行处理（不等待完成）
+        import asyncio
+        asyncio.create_task(
+            task_processor.process_removal_task(
+                db=db,
+                task_id=task_id,
+                video_id=video_id,
+                video_path=video.storage_path,
+                regions=request.regions,
+                video_metadata=video_metadata,
+                websocket_callback=websocket_callback,
+                client_id=request.client_id
+            )
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "task_id": task_id,
+                "video_id": video_id,
+                "status": "pending",
+                "message": "水印去除任务已创建，正在处理中"
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"创建水印去除任务失败: {str(e)}"
+        )
+
+
+@app.post("/api/batch/remove")
 
 
 @app.get("/api/batch/{job_id}")
@@ -625,6 +1156,501 @@ async def get_batch_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取批量任务状态失败: {str(e)}"
+        )
+@app.get("/api/tasks/{task_id}")
+async def get_task_status_endpoint(
+    task_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取任务状态
+
+    参数:
+        task_id: 任务ID
+        db: 数据库会话
+
+    返回:
+        dict: 任务详细信息，包括状态、进度、结果等
+    """
+    try:
+        # 获取任务信息
+        task = await crud.get_task_by_id(db, task_id)
+
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"任务 {task_id} 不存在"
+            )
+
+        # 获取视频信息
+        video = await crud.get_video_by_id(db, task.video_id)
+
+        # 构建响应数据
+        response_data = {
+            "task_id": task.task_id,
+            "user_id": task.user_id,
+            "video_id": task.video_id,
+            "task_type": task.task_type,
+            "status": task.status,
+            "parameters": task.parameters,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "started_at": task.started_at.isoformat() if task.started_at else None,
+            "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+            "error_message": task.error_message,
+            "result": task.result
+        }
+
+        # 添加视频信息
+        if video:
+            response_data["video"] = {
+                "video_id": video.video_id,
+                "format": video.format,
+                "resolution": {
+                    "width": video.resolution_width,
+                    "height": video.resolution_height
+                },
+                "duration": video.duration,
+                "storage_path": video.storage_path
+            }
+
+        # 如果任务已完成且有输出路径，添加输出文件信息
+        if task.status == "completed" and task.result and "output_path" in task.result:
+            output_path = Path(task.result["output_path"])
+            if output_path.exists():
+                response_data["output_file"] = {
+                    "path": task.result["output_path"],
+                    "size": output_path.stat().st_size,
+                    "exists": True
+                }
+
+        return {
+            "success": True,
+            "data": response_data
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取任务状态失败: {str(e)}"
+        )
+
+
+@app.get("/api/batch/{job_id}")
+
+
+@app.get("/api/videos")
+async def get_videos(
+    page: int = 1,
+    page_size: int = 20,
+    user_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取视频列表（支持分页）
+    
+    参数:
+        page: 页码（从1开始）
+        page_size: 每页数量（默认20）
+        user_id: 用户ID（可选，如果提供则只返回该用户的视频）
+        db: 数据库会话
+        
+    返回:
+        dict: 包含视频列表和分页信息
+    """
+    try:
+        # 验证分页参数
+        if page < 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="页码必须大于等于1"
+            )
+        if page_size < 1 or page_size > 100:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="每页数量必须在1-100之间"
+            )
+        
+        # 计算偏移量
+        skip = (page - 1) * page_size
+        
+        # 获取视频列表
+        if user_id:
+            videos = await crud.get_videos_by_user(db, user_id, skip=skip, limit=page_size)
+            total_count = await crud.get_videos_count_by_user(db, user_id)
+        else:
+            videos = await crud.get_all_videos(db, skip=skip, limit=page_size)
+            # 获取总数
+            from sqlalchemy import select, func
+            from .database import Video as DBVideo
+            result = await db.execute(select(func.count(DBVideo.video_id)))
+            total_count = result.scalar_one()
+        
+        # 计算总页数
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        # 构建响应数据
+        video_list = []
+        for video in videos:
+            video_list.append({
+                "video_id": video.video_id,
+                "user_id": video.user_id,
+                "format": video.format,
+                "resolution": {
+                    "width": video.resolution_width,
+                    "height": video.resolution_height
+                },
+                "duration": video.duration,
+                "codec": video.codec,
+                "framerate": video.framerate,
+                "bitrate": video.bitrate,
+                "file_size": video.file_size,
+                "storage_path": video.storage_path,
+                "import_source": video.import_source,
+                "created_at": video.created_at.isoformat() if video.created_at else None
+            })
+        
+        return {
+            "success": True,
+            "data": {
+                "videos": video_list,
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total_count": total_count,
+                    "total_pages": total_pages,
+                    "has_next": page < total_pages,
+                    "has_prev": page > 1
+                }
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取视频列表失败: {str(e)}"
+        )
+
+
+@app.get("/api/tasks")
+async def get_tasks_list(
+    page: int = 1,
+    page_size: int = 20,
+    user_id: Optional[str] = None,
+    task_status: Optional[str] = None,
+    task_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取任务列表（支持分页和过滤）
+
+    参数:
+        page: 页码（从1开始）
+        page_size: 每页数量（默认20）
+        user_id: 用户ID（可选，过滤特定用户的任务）
+        task_status: 任务状态（可选，过滤特定状态的任务）
+        task_type: 任务类型（可选，过滤特定类型的任务）
+        db: 数据库会话
+
+    返回:
+        dict: 包含任务列表和分页信息
+    """
+    try:
+        # 验证分页参数
+        if page < 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="页码必须大于等于1"
+            )
+        if page_size < 1 or page_size > 100:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="每页数量必须在1-100之间"
+            )
+
+        # 验证状态参数
+        if task_status:
+            valid_statuses = ["pending", "processing", "completed", "failed"]
+            if task_status not in valid_statuses:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"无效的状态，必须是以下之一: {', '.join(valid_statuses)}"
+                )
+
+        # 验证任务类型参数
+        if task_type:
+            valid_types = ["detection", "removal", "optimization"]
+            if task_type not in valid_types:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"无效的任务类型，必须是以下之一: {', '.join(valid_types)}"
+                )
+
+        # 计算偏移量
+        skip = (page - 1) * page_size
+
+        # 构建查询
+        from sqlalchemy import select, func, and_
+        from .database import ProcessingTask as DBProcessingTask
+
+        # 构建过滤条件
+        filters = []
+        if user_id:
+            filters.append(DBProcessingTask.user_id == user_id)
+        if task_status:
+            filters.append(DBProcessingTask.status == task_status)
+        if task_type:
+            filters.append(DBProcessingTask.task_type == task_type)
+
+        # 查询任务列表
+        stmt = select(DBProcessingTask)
+        if filters:
+            stmt = stmt.where(and_(*filters))
+        stmt = stmt.order_by(DBProcessingTask.created_at.desc()).offset(skip).limit(page_size)
+
+        result = await db.execute(stmt)
+        tasks = result.scalars().all()
+
+        # 查询总数
+        count_stmt = select(func.count(DBProcessingTask.task_id))
+        if filters:
+            count_stmt = count_stmt.where(and_(*filters))
+        count_result = await db.execute(count_stmt)
+        total_count = count_result.scalar_one()
+
+        # 计算总页数
+        total_pages = (total_count + page_size - 1) // page_size
+
+        # 构建任务列表
+        task_list = []
+        for task in tasks:
+            task_data = {
+                "task_id": task.task_id,
+                "user_id": task.user_id,
+                "video_id": task.video_id,
+                "task_type": task.task_type,
+                "status": task.status,
+                "parameters": task.parameters,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+                "started_at": task.started_at.isoformat() if task.started_at else None,
+                "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+                "error_message": task.error_message,
+                "result": task.result
+            }
+            task_list.append(task_data)
+
+        return {
+            "success": True,
+            "data": {
+                "tasks": task_list,
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total_count": total_count,
+                    "total_pages": total_pages,
+                    "has_next": page < total_pages,
+                    "has_prev": page > 1
+                },
+                "filters": {
+                    "user_id": user_id,
+                    "status": task_status,
+                    "task_type": task_type
+                }
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取任务列表失败: {str(e)}"
+        )
+
+
+@app.get("/api/videos")
+
+
+@app.get("/api/videos/{video_id}")
+async def get_video_details(
+    video_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取视频详情（包括水印区域和处理任务）
+    
+    参数:
+        video_id: 视频ID
+        db: 数据库会话
+        
+    返回:
+        dict: 视频详细信息
+    """
+    try:
+        # 获取视频及其关联数据
+        video = await crud.get_video_with_relations(db, video_id)
+        
+        if not video:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"视频 {video_id} 不存在"
+            )
+        
+        # 构建水印区域列表
+        watermark_regions = []
+        for region in video.watermark_regions:
+            watermark_regions.append({
+                "region_id": region.region_id,
+                "bbox": {
+                    "x": region.bbox_x,
+                    "y": region.bbox_y,
+                    "width": region.bbox_width,
+                    "height": region.bbox_height
+                },
+                "start_time": region.start_time,
+                "end_time": region.end_time,
+                "confidence": region.confidence,
+                "watermark_type": region.watermark_type,
+                "detection_method": region.detection_method,
+                "created_at": region.created_at.isoformat() if region.created_at else None
+            })
+        
+        # 构建处理任务列表
+        processing_tasks = []
+        for task in video.processing_tasks:
+            processing_tasks.append({
+                "task_id": task.task_id,
+                "task_type": task.task_type,
+                "status": task.status,
+                "parameters": task.parameters,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+                "started_at": task.started_at.isoformat() if task.started_at else None,
+                "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+                "error_message": task.error_message,
+                "result": task.result
+            })
+        
+        # 构建响应数据
+        return {
+            "success": True,
+            "data": {
+                "video_id": video.video_id,
+                "user_id": video.user_id,
+                "format": video.format,
+                "resolution": {
+                    "width": video.resolution_width,
+                    "height": video.resolution_height
+                },
+                "duration": video.duration,
+                "codec": video.codec,
+                "framerate": video.framerate,
+                "bitrate": video.bitrate,
+                "file_size": video.file_size,
+                "storage_path": video.storage_path,
+                "import_source": video.import_source,
+                "created_at": video.created_at.isoformat() if video.created_at else None,
+                "watermark_regions": watermark_regions,
+                "processing_tasks": processing_tasks
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取视频详情失败: {str(e)}"
+        )
+
+
+@app.delete("/api/videos/{video_id}")
+async def delete_video_endpoint(
+    video_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    删除视频及其关联文件
+    
+    参数:
+        video_id: 视频ID
+        db: 数据库会话
+        
+    返回:
+        dict: 删除结果
+    """
+    try:
+        # 获取视频信息
+        video = await crud.get_video_by_id(db, video_id)
+        
+        if not video:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"视频 {video_id} 不存在"
+            )
+        
+        # 删除物理文件
+        deleted_files = []
+        
+        # 1. 删除原始视频文件
+        video_path = Path(video.storage_path)
+        if video_path.exists():
+            try:
+                video_path.unlink()
+                deleted_files.append(str(video_path))
+            except Exception as e:
+                print(f"删除视频文件失败: {e}")
+        
+        # 2. 删除缩略图文件
+        thumbnail_path = THUMBNAIL_DIR / f"{video_id}_*.jpg"
+        import glob
+        for thumb_file in glob.glob(str(thumbnail_path)):
+            try:
+                Path(thumb_file).unlink()
+                deleted_files.append(thumb_file)
+            except Exception as e:
+                print(f"删除缩略图失败: {e}")
+        
+        # 3. 删除输出文件（查找所有相关的处理任务）
+        tasks = await crud.get_tasks_by_video(db, video_id)
+        for task in tasks:
+            if task.result and "output_path" in task.result:
+                output_path = Path(task.result["output_path"])
+                if output_path.exists():
+                    try:
+                        output_path.unlink()
+                        deleted_files.append(str(output_path))
+                    except Exception as e:
+                        print(f"删除输出文件失败: {e}")
+        
+        # 删除数据库记录（级联删除水印区域和任务）
+        success = await crud.delete_video(db, video_id)
+        await db.commit()
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="删除数据库记录失败"
+            )
+        
+        return {
+            "success": True,
+            "data": {
+                "video_id": video_id,
+                "message": "视频及其关联文件已成功删除",
+                "deleted_files": deleted_files
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"删除视频失败: {str(e)}"
         )
 
 
