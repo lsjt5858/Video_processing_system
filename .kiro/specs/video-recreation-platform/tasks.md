@@ -162,15 +162,15 @@
     - 推送处理进度
     - 推送任务完成通知
 
-- [-] 7. 搭建前端项目
-  - [ ] 7.1 创建React + Vite项目
+- [x] 7. 搭建前端项目
+  - [x] 7.1 创建React + Vite项目
     - 使用Vite创建React + TypeScript项目
     - 安装Ant Design UI组件库
     - 安装axios（HTTP请求）
     - 安装react-router-dom（路由）
     - 配置代理转发到后端API
     
-  - [ ] 7.2 配置项目结构
+  - [x] 7.2 配置项目结构
     - 创建src/pages/（页面组件）
     - 创建src/components/（通用组件）
     - 创建src/services/（API服务）
@@ -178,15 +178,15 @@
     - 创建src/types/（TypeScript类型定义）
     - 配置路由
 
-- [ ] 8. 实现前端页面
-  - [ ] 8.1 实现视频列表页面
+- [-] 8. 实现前端页面
+  - [x] 8.1 实现视频列表页面
     - 创建VideoList组件
     - 使用Ant Design Table展示视频列表
     - 实现分页、搜索、筛选功能
     - 显示视频缩略图、元数据
     - 提供删除、查看详情按钮
     
-  - [ ] 8.2 实现视频上传页面
+  - [x] 8.2 实现视频上传页面
     - 创建VideoUpload组件
     - 使用Ant Design Upload组件
     - 支持拖拽上传
