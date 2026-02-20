@@ -8,6 +8,7 @@ interface UseWebSocketOptions {
   reconnect?: boolean
   reconnectInterval?: number
   maxReconnectAttempts?: number
+  enabled?: boolean
 }
 
 /**
@@ -23,6 +24,7 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
     reconnect = true,
     reconnectInterval = 3000,
     maxReconnectAttempts = 5,
+    enabled = true,
   } = options
 
   const wsRef = useRef<WebSocket | null>(null)
@@ -109,11 +111,14 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
   }
 
   useEffect(() => {
+    if (!enabled) {
+      return
+    }
     shouldReconnectRef.current = true
     reconnectAttemptsRef.current = 0
     connect()
     return () => disconnect()
-  }, [url])
+  }, [url, enabled])
 
   return {
     isConnected,

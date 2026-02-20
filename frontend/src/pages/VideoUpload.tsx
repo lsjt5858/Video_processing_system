@@ -87,7 +87,8 @@ const VideoUpload: React.FC = () => {
     onError: (error) => {
       console.warn('WebSocket 连接错误，将使用轮询方式获取进度')
     },
-    reconnect: wsEnabled, // 只在启用时重连
+    enabled: wsEnabled,
+    reconnect: true,
     maxReconnectAttempts: 3,
   })
 
@@ -135,6 +136,7 @@ const VideoUpload: React.FC = () => {
       return
     }
 
+    setWsEnabled(true)
     setUploading(true)
     const status: FileUploadStatus = {
       file,
@@ -164,6 +166,7 @@ const VideoUpload: React.FC = () => {
       message.error('上传失败')
     } finally {
       setUploading(false)
+      setWsEnabled(false)
     }
   }
 
@@ -187,6 +190,7 @@ const VideoUpload: React.FC = () => {
       return
     }
 
+    setWsEnabled(true)
     setUploading(true)
     
     // 初始化所有文件状态
@@ -228,11 +232,13 @@ const VideoUpload: React.FC = () => {
       )
     } finally {
       setUploading(false)
+      setWsEnabled(false)
     }
   }
 
   // 处理URL下载
   const handleUrlDownload = async (values: { url: string }) => {
+    setWsEnabled(true)
     setUrlDownloading(true)
     setDownloadProgress(0)
 
@@ -249,6 +255,7 @@ const VideoUpload: React.FC = () => {
       message.error(error.response?.data?.error?.message || '下载失败，请检查URL是否有效')
     } finally {
       setUrlDownloading(false)
+      setWsEnabled(false)
     }
   }
 

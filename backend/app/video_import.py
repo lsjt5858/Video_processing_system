@@ -364,6 +364,10 @@ async def upload_single_video(
                 storage_path=file_path,
                 import_source="local"
             )
+            await db.commit()  # 提交事务
+        except Exception as e:
+            await db.rollback()  # 发生错误时回滚
+            raise
         finally:
             await db.close()
         
@@ -785,6 +789,10 @@ async def download_video_from_url(
                     storage_path=file_path,
                     import_source="url"
                 )
+                await db.commit()  # 提交事务
+            except Exception as e:
+                await db.rollback()  # 发生错误时回滚
+                raise
             finally:
                 await db.close()
             
