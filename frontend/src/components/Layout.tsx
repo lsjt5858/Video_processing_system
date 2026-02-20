@@ -29,17 +29,17 @@ const Layout: React.FC = () => {
     {
       key: '/upload',
       icon: <UploadOutlined />,
-      label: '上传视频',
+      label: '上传',
     },
     {
       key: '/batch-processing',
       icon: <AppstoreOutlined />,
-      label: '批量处理',
+      label: '批处理',
     },
     {
       key: '/task-manager',
       icon: <UnorderedListOutlined />,
-      label: '任务管理',
+      label: '任务中心',
     },
   ]
 

@@ -23,8 +23,21 @@ from .database import get_db
 from .crud import create_video
 
 
+# 导入错误类
+from .errors import (
+    FileSizeExceededError,
+    UnsupportedFormatError,
+    MetadataExtractionError,
+    InvalidUrlError,
+    VideoNotAccessibleError,
+    CorruptedVideoError,
+    FFmpegError,
+    log_error
+)
+
 # 支持的视频格式
 SUPPORTED_FORMATS = {".mp4", ".avi", ".mov", ".mkv"}
+SUPPORTED_FORMATS_LIST = ["mp4", "avi", "mov", "mkv"]
 
 # 文件大小限制（5GB）
 MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024  # 5GB in bytes
@@ -35,31 +48,6 @@ MAX_BATCH_SIZE = 50
 # 获取上传目录
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
-
-
-class FileSizeExceededError(Exception):
-    """文件大小超过限制错误"""
-    pass
-
-
-class UnsupportedFormatError(Exception):
-    """不支持的视频格式错误"""
-    pass
-
-
-class MetadataExtractionError(Exception):
-    """元数据提取失败错误"""
-    pass
-
-
-class InvalidUrlError(Exception):
-    """无效的视频链接错误"""
-    pass
-
-
-class VideoNotAccessibleError(Exception):
-    """视频不可访问错误"""
-    pass
 
 
 def validate_video_format(filename: str) -> str:
@@ -75,31 +63,30 @@ def validate_video_format(filename: str) -> str:
     异常:
         UnsupportedFormatError: 不支持的格式
     """
+    if not filename:
+        raise UnsupportedFormatError("", SUPPORTED_FORMATS_LIST)
+    
     file_ext = Path(filename).suffix.lower()
     
     if file_ext not in SUPPORTED_FORMATS:
-        raise UnsupportedFormatError(
-            f"不支持的视频格式: {file_ext}。支持的格式: {', '.join(SUPPORTED_FORMATS)}"
-        )
+        raise UnsupportedFormatError(file_ext, SUPPORTED_FORMATS_LIST)
     
     return file_ext.lstrip('.')
 
 
-def validate_file_size(file_size: int) -> None:
+def validate_file_size(file_size: int, filename: str = "") -> None:
     """
     验证文件大小
     
     参数:
         file_size: 文件大小（字节）
+        filename: 文件名（可选）
         
     异常:
         FileSizeExceededError: 文件大小超过限制
     """
     if file_size > MAX_FILE_SIZE:
-        size_gb = file_size / (1024 * 1024 * 1024)
-        raise FileSizeExceededError(
-            f"文件大小 {size_gb:.2f}GB 超过限制 5GB"
-        )
+        raise FileSizeExceededError(file_size, MAX_FILE_SIZE, filename)
 
 
 def extract_video_metadata(video_path: str) -> Dict[str, Any]:

@@ -59,6 +59,18 @@ const WatermarkRemoval: React.FC = () => {
   const { task, progress } = useTaskProgress(taskId || undefined)
   const [resultVideoUrl, setResultVideoUrl] = useState<string>('')
 
+  const isValidVideo = (data: any): data is Video => {
+    return (
+      data &&
+      typeof data === 'object' &&
+      typeof data.format === 'string' &&
+      data.resolution &&
+      typeof data.resolution.width === 'number' &&
+      typeof data.resolution.height === 'number' &&
+      typeof data.duration === 'number'
+    )
+  }
+
   useEffect(() => {
     if (videoId) {
       loadVideoAndWatermarks()
@@ -89,13 +101,14 @@ const WatermarkRemoval: React.FC = () => {
         getVideoById(videoId),
         getWatermarks(videoId)
       ])
-      
-      setVideo(videoData)
-      setRegions(watermarksData)
-      
+
+      const normalizedVideo = isValidVideo(videoData) ? videoData : null
+      setVideo(normalizedVideo)
+      setRegions(Array.isArray(watermarksData) ? watermarksData : [])
+
       // 根据水印区域计算推荐的裁剪参数
-      if (watermarksData.length > 0) {
-        calculateOptimalCrop(videoData, watermarksData)
+      if (normalizedVideo && Array.isArray(watermarksData) && watermarksData.length > 0) {
+        calculateOptimalCrop(normalizedVideo, watermarksData)
       }
     } catch (error) {
       message.error('加载视频信息失败')
@@ -244,7 +257,7 @@ const WatermarkRemoval: React.FC = () => {
 
   if (!video) {
     return (
-      <Card>
+      <Card title="水印去除">
         <Alert
           message="视频不存在"
           description="未找到指定的视频，请返回视频列表"

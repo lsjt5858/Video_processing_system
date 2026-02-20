@@ -48,6 +48,8 @@ const VideoUpload: React.FC = () => {
   const [fileStatuses, setFileStatuses] = useState<FileUploadStatus[]>([])
   const [urlDownloading, setUrlDownloading] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState(0)
+  const [urlError, setUrlError] = useState<string | null>(null)
+
 
   // WebSocket连接用于实时进度更新
   const clientId = `client_${Date.now()}`
@@ -312,7 +314,7 @@ const VideoUpload: React.FC = () => {
       <Card title="视频上传">
         <Alert
           message="上传说明"
-          description="支持 MP4、AVI、MOV、MKV 格式，单个文件不超过 5GB，批量上传最多 50 个文件"
+          description="支持 MP4、AVI、MOV、MKV 格式，单个文件不超过 5GB，批量上传上限为 50 个文件"
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
@@ -349,7 +351,7 @@ const VideoUpload: React.FC = () => {
                     >
                       开始上传
                     </Button>
-                    <Button onClick={() => navigate('/videos')}>
+                    <Button autoInsertSpace={false} onClick={() => navigate('/videos')}>
                       取消
                     </Button>
                   </Space>
@@ -390,7 +392,6 @@ const VideoUpload: React.FC = () => {
                       type="primary" 
                       onClick={handleBatchUpload}
                       loading={uploading}
-                      disabled={fileList.length === 0}
                     >
                       开始批量上传
                     </Button>
@@ -400,7 +401,7 @@ const VideoUpload: React.FC = () => {
                     >
                       清空列表
                     </Button>
-                    <Button onClick={() => navigate('/videos')}>
+                    <Button autoInsertSpace={false} onClick={() => navigate('/videos')}>
                       取消
                     </Button>
                   </Space>
@@ -428,13 +429,15 @@ const VideoUpload: React.FC = () => {
                       label="视频链接"
                       rules={[
                         { required: true, message: '请输入视频链接' },
-                        { type: 'url', message: '请输入有效的URL' }
                       ]}
+                      validateStatus={urlError ? 'error' : undefined}
+                      help={urlError || undefined}
                     >
                       <Input 
                         placeholder="请输入视频链接（支持 YouTube、Bilibili 等平台）" 
                         prefix={<LinkOutlined />}
                         size="large"
+                        onChange={() => setUrlError(null)}
                       />
                     </Form.Item>
 
@@ -452,12 +455,28 @@ const VideoUpload: React.FC = () => {
                       <Space>
                         <Button 
                           type="primary" 
-                          htmlType="submit" 
+                          htmlType="button" 
                           loading={urlDownloading}
+                          onClick={async () => {
+                            const rawUrl = form.getFieldValue('url')
+                            const url = typeof rawUrl === 'string' ? rawUrl.trim() : ''
+                            if (!url) {
+                              setUrlError('请输入视频链接')
+                              return
+                            }
+                            try {
+                              new URL(url)
+                            } catch {
+                              setUrlError('请输入有效的URL')
+                              return
+                            }
+                            setUrlError(null)
+                            await handleUrlDownload({ url })
+                          }}
                         >
                           开始下载
                         </Button>
-                        <Button onClick={() => navigate('/videos')}>
+                        <Button autoInsertSpace={false} onClick={() => navigate('/videos')}>
                           取消
                         </Button>
                       </Space>

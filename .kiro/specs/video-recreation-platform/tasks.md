@@ -225,39 +225,39 @@
     - 提供任务取消、重试功能
     - 显示任务详情和错误信息
 
-- [ ] 9. 实现前端核心功能
-  - [ ] 9.1 实现API服务层
+- [x] 9. 实现前端核心功能
+  - [x] 9.1 实现API服务层
     - 创建src/services/api.ts
     - 封装所有API调用
     - 实现请求拦截器（添加token等）
     - 实现响应拦截器（错误处理）
     
-  - [ ] 9.2 实现WebSocket连接
+  - [x] 9.2 实现WebSocket连接
     - 创建src/services/websocket.ts
     - 实现WebSocket连接管理
     - 实现消息订阅和分发
     - 实现断线重连
     
-  - [ ] 9.3 实现状态管理
+  - [x] 9.3 实现状态管理
     - 使用React Context或Zustand
     - 管理视频列表状态
     - 管理任务状态
     - 管理WebSocket连接状态
     
-  - [ ] 9.4 实现自定义Hooks
+  - [x] 9.4 实现自定义Hooks
     - useWebSocket - WebSocket连接Hook
     - useVideoUpload - 视频上传Hook
     - useTaskProgress - 任务进度Hook
     - useVideoList - 视频列表Hook
     
-  - [ ] 9.5 实现通用组件
+  - [x] 9.5 实现通用组件
     - ProgressBar - 进度条组件
     - VideoPlayer - 视频播放器组件
     - VideoThumbnail - 视频缩略图组件
     - WatermarkCanvas - 水印标记画布组件
 
-- [ ] 10. 测试和优化
-  - [ ] 10.1 后端功能测试
+- [-] 10. 测试和优化
+  - [x] 10.1 后端功能测试
     - 测试视频上传（不同格式、大小）
     - 测试批量上传（并发控制）
     - 测试URL下载（不同视频网站）
@@ -265,14 +265,14 @@
     - 测试水印去除（不同裁剪参数）
     - 测试批量处理（多个视频）
     
-  - [ ] 10.2 前端功能测试
+  - [x] 10.2 前端功能测试
     - 测试所有页面路由
     - 测试文件上传交互
     - 测试水印标记交互
     - 测试WebSocket实时更新
     - 测试批量操作
     
-  - [ ] 10.3 错误处理
+  - [-] 10.3 错误处理
     - 添加文件格式验证
     - 添加文件大小限制
     - 添加URL有效性检查

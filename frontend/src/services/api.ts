@@ -210,6 +210,13 @@ export const getTaskStatus = async (taskId: string): Promise<ProcessingTask> => 
 }
 
 /**
+ * 获取任务详情（别名）
+ */
+export const getTaskById = async (taskId: string): Promise<ProcessingTask> => {
+  return getTaskStatus(taskId)
+}
+
+/**
  * 获取任务列表
  */
 export const getTasks = async (params?: {
