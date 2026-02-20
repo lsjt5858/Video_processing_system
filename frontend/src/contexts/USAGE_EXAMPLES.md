@@ -449,7 +449,7 @@ function AppLayout() {
       <GlobalTaskListener />
       
       <Header>
-        <h1>视频水印去除工具</h1>
+        <h1>一键美</h1>
       </Header>
       
       <Content style={{ padding: '24px' }}>

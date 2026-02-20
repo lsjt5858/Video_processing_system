@@ -7,6 +7,7 @@ interface UseWebSocketOptions {
   onClose?: () => void
   reconnect?: boolean
   reconnectInterval?: number
+  maxReconnectAttempts?: number
 }
 
 /**
@@ -21,20 +22,30 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
     onClose,
     reconnect = true,
     reconnectInterval = 3000,
+    maxReconnectAttempts = 5,
   } = options
 
   const wsRef = useRef<WebSocket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [lastMessage, setLastMessage] = useState<any>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>()
+  const reconnectAttemptsRef = useRef(0)
+  const shouldReconnectRef = useRef(true)
 
   const connect = () => {
+    // 检查是否超过最大重连次数
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      console.warn(`WebSocket 连接失败，已达到最大重连次数 (${maxReconnectAttempts})`)
+      return
+    }
+
     try {
       const ws = new WebSocket(url)
 
       ws.onopen = () => {
         console.log('WebSocket connected')
         setIsConnected(true)
+        reconnectAttemptsRef.current = 0 // 重置重连计数
         onOpen?.()
       }
 
@@ -59,21 +70,27 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
         onClose?.()
 
         // 自动重连
-        if (reconnect) {
+        if (reconnect && shouldReconnectRef.current && reconnectAttemptsRef.current < maxReconnectAttempts) {
+          reconnectAttemptsRef.current += 1
+          console.log(`尝试重连 WebSocket... (${reconnectAttemptsRef.current}/${maxReconnectAttempts})`)
+          
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log('Reconnecting WebSocket...')
             connect()
           }, reconnectInterval)
+        } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+          console.warn('WebSocket 连接失败，已达到最大重连次数')
         }
       }
 
       wsRef.current = ws
     } catch (error) {
       console.error('Failed to create WebSocket:', error)
+      reconnectAttemptsRef.current += 1
     }
   }
 
   const disconnect = () => {
+    shouldReconnectRef.current = false // 标记不应该重连
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
     }
@@ -92,6 +109,8 @@ export const useWebSocket = (url: string, options: UseWebSocketOptions = {}) => 
   }
 
   useEffect(() => {
+    shouldReconnectRef.current = true
+    reconnectAttemptsRef.current = 0
     connect()
     return () => disconnect()
   }, [url])

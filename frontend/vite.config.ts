@@ -5,6 +5,7 @@ import path from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  base: './', // Electron 需要相对路径
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

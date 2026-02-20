@@ -52,7 +52,12 @@ const BatchProcessing: React.FC = () => {
       } else if (data.type === 'error') {
         updateVideoStatus(data.video_id, { status: 'failed', error: data.message })
       }
-    }
+    },
+    onError: () => {
+      console.warn('WebSocket 连接错误，将使用轮询方式')
+    },
+    reconnect: true,
+    maxReconnectAttempts: 3,
   })
 
   const updateVideoStatus = (videoId: string, updates: Partial<BatchVideo>) => {

@@ -41,7 +41,12 @@ const TaskManager: React.FC = () => {
         // 任务完成，刷新列表
         loadTasks()
       }
-    }
+    },
+    onError: () => {
+      console.warn('WebSocket 连接错误，将使用轮询方式')
+    },
+    reconnect: true,
+    maxReconnectAttempts: 3,
   })
 
   useEffect(() => {

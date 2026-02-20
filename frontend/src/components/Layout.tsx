@@ -75,7 +75,7 @@ const Layout: React.FC = () => {
           fontWeight: 'bold',
           padding: '0 16px'
         }}>
-          {collapsed ? '视频' : '视频再创作平台'}
+          {collapsed ? '一键美' : '一键美'}
         </div>
         <Menu
           theme="dark"

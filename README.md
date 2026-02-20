@@ -1,8 +1,8 @@
-# 视频水印去除工具 / Video Watermark Remover
+# 一键美 / YiJianMei
 
-一个基于AI的视频处理系统，提供水印检测、智能去除和视频优化功能。
+一个智能视频美化工具，提供水印检测、智能去除和视频优化功能。
 
-An AI-powered video processing system that provides watermark detection, intelligent removal, and video optimization features.
+An intelligent video beautification tool that provides watermark detection, smart removal, and video optimization features.
 
 ## 📋 目录 / Table of Contents
 
@@ -361,7 +361,7 @@ A: 取决于视频大小和服务器性能，一般1GB视频需要2-5分钟。
 ## 📂 项目结构 / Project Structure
 
 ```
-video-watermark-remover/
+yijianmei/
 ├── backend/                    # 后端项目
 │   ├── app/                   # 应用代码
 │   │   ├── main.py           # FastAPI入口

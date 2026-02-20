@@ -58,10 +58,11 @@ const VideoUpload: React.FC = () => {
   const [urlDownloading, setUrlDownloading] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState(0)
   const [urlError, setUrlError] = useState<string | null>(null)
+  const [wsEnabled, setWsEnabled] = useState(false) // 控制 WebSocket 是否启用
 
 
-  // WebSocket连接用于实时进度更新
-  const clientId = `client_${Date.now()}`
+  // WebSocket连接用于实时进度更新（仅在上传时启用）
+  const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   const wsUrl = `ws://localhost:8000/ws/${clientId}`
   
   const { isConnected } = useWebSocket(wsUrl, {
@@ -83,7 +84,11 @@ const VideoUpload: React.FC = () => {
         message.success(`任务完成: ${data.task_id}`)
       }
     },
-    reconnect: true,
+    onError: (error) => {
+      console.warn('WebSocket 连接错误，将使用轮询方式获取进度')
+    },
+    reconnect: wsEnabled, // 只在启用时重连
+    maxReconnectAttempts: 3,
   })
 
   useEffect(() => {
@@ -115,25 +120,6 @@ const VideoUpload: React.FC = () => {
       return false
     }
     
-    return true
-  }
-    const maxSize = 5 * 1024 * 1024 * 1024 // 5GB
-
-    // 检查文件格式
-    const hasValidType = validFormats.includes(file.type)
-    const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
-    
-    if (!hasValidType && !hasValidExtension) {
-      message.error(`${file.name}: 不支持的文件格式，仅支持 MP4、AVI、MOV、MKV`)
-      return false
-    }
-
-    // 检查文件大小
-    if (file.size > maxSize) {
-      message.error(`${file.name}: 文件大小超过 5GB 限制`)
-      return false
-    }
-
     return true
   }
 

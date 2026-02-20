@@ -1,6 +1,6 @@
 # 文档索引 / Documentation Index
 
-欢迎查阅视频水印去除工具的完整文档。
+欢迎查阅一键美的完整文档。
 
 ## 📚 主要文档 / Main Documentation
 
