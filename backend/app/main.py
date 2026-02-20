@@ -626,3 +626,78 @@ async def get_batch_status(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取批量任务状态失败: {str(e)}"
         )
+
+
+@app.get("/api/videos/{video_id}/output")
+async def download_output_video(
+    video_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    下载处理后的视频
+    
+    参数:
+        video_id: 原始视频ID或输出视频ID
+        db: 数据库会话
+        
+    返回:
+        FileResponse: 视频文件
+    """
+    from fastapi.responses import FileResponse
+    from sqlalchemy import select, or_
+    from .database import ProcessingTask as DBProcessingTask
+    
+    try:
+        # 查询该视频的已完成处理任务（按完成时间降序，获取最新的）
+        stmt = select(DBProcessingTask).where(
+            DBProcessingTask.video_id == video_id,
+            DBProcessingTask.status == "completed",
+            DBProcessingTask.result.isnot(None)
+        ).order_by(DBProcessingTask.completed_at.desc())
+        
+        result = await db.execute(stmt)
+        task = result.scalars().first()  # 使用 first() 而不是 scalar_one_or_none()
+        
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"未找到视频 {video_id} 的处理结果"
+            )
+        
+        # 从任务结果中获取输出路径
+        output_path = task.result.get("output_path")
+        if not output_path:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="处理结果中未找到输出路径"
+            )
+        
+        # 验证文件是否存在
+        output_file = Path(output_path)
+        if not output_file.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"输出文件不存在: {output_path}"
+            )
+        
+        # 获取输出视频ID和文件名
+        output_video_id = task.result.get("output_video_id", "output")
+        filename = f"{output_video_id}.mp4"
+        
+        # 返回文件响应
+        return FileResponse(
+            path=str(output_file),
+            media_type="video/mp4",
+            filename=filename,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"下载输出视频失败: {str(e)}"
+        )
