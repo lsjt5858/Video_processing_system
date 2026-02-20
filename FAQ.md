@@ -753,18 +753,24 @@ done
 
 ## 📚 相关文档 / Related Documentation
 
-- [README.md](./README.md) - 项目概述
-- [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) - API文档
-- [DEPLOYMENT.md](./DEPLOYMENT.md) - 部署指南
+- **[项目概述](./README.md)** - 了解项目功能和快速开始
+- **[快速开始](./docs/QUICKSTART.md)** - 5分钟快速部署
+- **[API文档](./API_DOCUMENTATION.md)** - 完整API接口文档
+- **[部署指南](./DEPLOYMENT.md)** - 部署和运维指南
+- **[后端文档](./docs/BACKEND_README.md)** - 后端架构和开发
+- **[前端文档](./docs/FRONTEND_README.md)** - 前端架构和开发
+- **[文档索引](./docs/INDEX.md)** - 所有文档导航
 
 ## 💬 还有问题？ / More Questions?
 
 如果您的问题没有在这里找到答案：
 
-1. 查看其他文档
-2. 搜索GitHub Issues
-3. 提交新的Issue
-4. 参与社区讨论
+1. 查看 [README.md](./README.md) 项目概述
+2. 查看 [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) API文档
+3. 查看 [DEPLOYMENT.md](./DEPLOYMENT.md) 部署指南
+4. 搜索 GitHub Issues
+5. 提交新的 Issue
+6. 参与社区讨论
 
 ---
 

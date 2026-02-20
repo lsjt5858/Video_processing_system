@@ -276,42 +276,25 @@ npm run build
 5. 查看每个视频的处理状态
 6. 批量下载处理结果
 
-## 📚 API文档 / API Documentation
+## 📚 文档 / Documentation
 
-详细的API文档请参考：[API_DOCUMENTATION.md](./API_DOCUMENTATION.md)
+- **[API文档](./API_DOCUMENTATION.md)** - 完整的API接口文档
+- **[部署指南](./DEPLOYMENT.md)** - 详细的部署说明
+- **[常见问题](./FAQ.md)** - 常见问题解答
+- **[快速开始](./docs/QUICKSTART.md)** - 5分钟快速上手
 
-### 快速参考
+### API快速参考
 
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 
-### 主要端点
-
-```
-POST   /api/videos/upload          # 上传视频
-POST   /api/videos/batch-upload    # 批量上传
-POST   /api/videos/download         # URL下载
-GET    /api/videos                  # 获取视频列表
-GET    /api/videos/{video_id}       # 获取视频详情
-DELETE /api/videos/{video_id}       # 删除视频
-
-GET    /api/videos/{video_id}/frames           # 获取视频帧
-POST   /api/videos/{video_id}/watermarks       # 标记水印
-GET    /api/videos/{video_id}/watermarks       # 获取水印列表
-PUT    /api/videos/{video_id}/watermarks/{id}  # 更新水印
-DELETE /api/videos/{video_id}/watermarks/{id}  # 删除水印
-
-POST   /api/videos/{video_id}/remove  # 去除水印
-POST   /api/batch/remove              # 批量去除
-GET    /api/tasks/{task_id}           # 获取任务状态
-GET    /api/tasks                     # 获取任务列表
-
-WS     /ws/{client_id}                # WebSocket连接
-```
+主要端点：视频管理、水印检测、水印去除、任务管理、WebSocket实时通信
 
 ## 🚢 部署指南 / Deployment Guide
 
 详细的部署文档请参考：[DEPLOYMENT.md](./DEPLOYMENT.md)
+
+### 三种部署方式
 
 ### Docker Compose 部署（推荐）
 
@@ -361,23 +344,70 @@ docker-compose down
 
 ### 快速问答
 
-**Q: 支持哪些视频格式？**
+**Q: 支持哪些视频格式？**  
 A: 支持MP4、AVI、MOV、MKV格式。
 
-**Q: 单个文件大小限制是多少？**
+**Q: 单个文件大小限制是多少？**  
 A: 默认限制为5GB，可以在配置文件中修改。
 
-**Q: 批量上传最多支持多少个文件？**
+**Q: 批量上传最多支持多少个文件？**  
 A: 最多支持50个文件同时上传。
 
-**Q: 处理速度如何？**
+**Q: 处理速度如何？**  
 A: 取决于视频大小和服务器性能，一般1GB视频需要2-5分钟。
 
-**Q: 如何查看处理进度？**
-A: 系统通过WebSocket实时推送处理进度，在任务管理页面可以查看。
+更多问题请查看 [FAQ.md](./FAQ.md)
 
-**Q: 处理失败怎么办？**
-A: 查看任务详情中的错误信息，常见问题包括视频格式不支持、文件损坏等。
+## 📂 项目结构 / Project Structure
+
+```
+video-watermark-remover/
+├── backend/                    # 后端项目
+│   ├── app/                   # 应用代码
+│   │   ├── main.py           # FastAPI入口
+│   │   ├── models.py         # 数据模型
+│   │   ├── database.py       # 数据库配置
+│   │   ├── crud.py           # CRUD操作
+│   │   ├── video_import.py   # 视频导入
+│   │   ├── watermark_detection.py  # 水印检测
+│   │   ├── watermark_removal.py    # 水印去除
+│   │   ├── task_processor.py       # 任务处理
+│   │   ├── queue_manager.py        # 队列管理
+│   │   ├── cache_manager.py        # 缓存管理
+│   │   ├── chunked_upload.py       # 分片上传
+│   │   └── errors.py               # 错误处理
+│   ├── uploads/              # 上传的视频
+│   ├── outputs/              # 处理后的视频
+│   ├── thumbnails/           # 视频缩略图
+│   ├── Dockerfile           # Docker配置
+│   ├── docker-compose.yml   # Docker编排
+│   ├── requirements.txt     # Python依赖
+│   ├── .env.example         # 环境变量模板
+│   └── run.sh              # 启动脚本
+│
+├── frontend/                 # 前端项目
+│   ├── src/
+│   │   ├── pages/           # 页面组件
+│   │   ├── components/      # 通用组件
+│   │   ├── contexts/        # React Context
+│   │   ├── hooks/           # 自定义Hooks
+│   │   ├── services/        # API服务
+│   │   └── types/           # TypeScript类型
+│   ├── Dockerfile          # Docker配置
+│   ├── nginx.conf          # Nginx配置
+│   ├── package.json        # 依赖配置
+│   └── vite.config.ts      # Vite配置
+│
+├── docs/                    # 文档目录
+│   ├── QUICKSTART.md       # 快速开始
+│   ├── BACKEND_README.md   # 后端说明
+│   └── FRONTEND_README.md  # 前端说明
+│
+├── README.md               # 项目主文档
+├── API_DOCUMENTATION.md    # API文档
+├── DEPLOYMENT.md           # 部署指南
+└── FAQ.md                  # 常见问题
+```
 
 ## 📄 许可证 / License
 
@@ -387,10 +417,28 @@ MIT License
 
 欢迎提交Issue和Pull Request！
 
+贡献步骤：
+1. Fork项目
+2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 创建Pull Request
+
 ## 📧 联系方式 / Contact
 
 如有问题或建议，请提交Issue。
 
+## 🙏 致谢 / Acknowledgments
+
+感谢以下开源项目：
+- [FastAPI](https://fastapi.tiangolo.com/) - 现代化的Python Web框架
+- [React](https://react.dev/) - 用户界面库
+- [Ant Design](https://ant.design/) - 企业级UI组件库
+- [FFmpeg](https://ffmpeg.org/) - 视频处理工具
+- [OpenCV](https://opencv.org/) - 计算机视觉库
+
 ---
 
 **注意**: 本工具仅用于处理用户拥有合法版权的视频，请勿用于侵权行为。
+
+**最后更新**: 2024-01-15

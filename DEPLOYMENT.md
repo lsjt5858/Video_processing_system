@@ -2,6 +2,8 @@
 
 视频水印去除工具的完整部署指南，包括前后端的本地开发、Docker部署和生产环境部署。
 
+> **提示**: 如果您想快速开始，请查看 [快速开始指南](./docs/QUICKSTART.md)
+
 ## 📋 目录 / Table of Contents
 
 - [系统要求](#系统要求)
@@ -12,6 +14,14 @@
 - [性能优化](#性能优化)
 - [监控和维护](#监控和维护)
 - [故障排查](#故障排查)
+
+## 📚 相关文档 / Related Documentation
+
+- **[快速开始](./docs/QUICKSTART.md)** - 5分钟快速部署
+- **[API文档](./API_DOCUMENTATION.md)** - API接口文档
+- **[常见问题](./FAQ.md)** - 问题排查指南
+- **[后端说明](./docs/BACKEND_README.md)** - 后端详细文档
+- **[前端说明](./docs/FRONTEND_README.md)** - 前端详细文档
 
 ## 🖥 系统要求 / System Requirements
 

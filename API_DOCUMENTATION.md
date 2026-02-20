@@ -916,11 +916,20 @@ curl "http://localhost:8000/health"
 
 ---
 
-## 支持 / Support
+## 📚 相关文档 / Related Documentation
 
-如有问题，请查看：
-- [README.md](./README.md)
-- [FAQ.md](./FAQ.md)
-- [DEPLOYMENT.md](./DEPLOYMENT.md)
+- **[项目概述](./README.md)** - 了解项目功能和快速开始
+- **[快速开始](./docs/QUICKSTART.md)** - 5分钟快速部署
+- **[部署指南](./DEPLOYMENT.md)** - 完整部署和运维指南
+- **[常见问题](./FAQ.md)** - 问题排查和解决方案
+- **[后端文档](./docs/BACKEND_README.md)** - 后端架构和开发
+- **[前端文档](./docs/FRONTEND_README.md)** - 前端架构和开发
+- **[文档索引](./docs/INDEX.md)** - 所有文档导航
 
-或提交Issue到项目仓库。
+## 💬 支持 / Support
+
+如有问题，请：
+1. 查看 [FAQ.md](./FAQ.md) 常见问题解答
+2. 查看 [DEPLOYMENT.md](./DEPLOYMENT.md) 故障排查部分
+3. 搜索 GitHub Issues
+4. 提交新的 Issue 到项目仓库
