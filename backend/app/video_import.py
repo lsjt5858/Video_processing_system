@@ -9,12 +9,14 @@ import uuid
 import shutil
 import json
 import subprocess
+import asyncio
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Callable
 from datetime import datetime
 
 from fastapi import UploadFile, HTTPException, status
 from fastapi.responses import JSONResponse
+import yt_dlp
 
 from .models import VideoFormat, VideoMetadata, VideoImportResult
 from .database import get_db
@@ -47,6 +49,16 @@ class UnsupportedFormatError(Exception):
 
 class MetadataExtractionError(Exception):
     """元数据提取失败错误"""
+    pass
+
+
+class InvalidUrlError(Exception):
+    """无效的视频链接错误"""
+    pass
+
+
+class VideoNotAccessibleError(Exception):
+    """视频不可访问错误"""
     pass
 
 
@@ -387,3 +399,290 @@ async def upload_batch_videos(
     results["failed_count"] = len(results["failed"])
     
     return results
+
+
+
+class DownloadProgressHook:
+    """
+    yt-dlp下载进度回调类
+    
+    用于捕获下载进度并通过WebSocket推送给客户端
+    """
+    def __init__(self, websocket_callback: Optional[Callable] = None, client_id: Optional[str] = None):
+        self.websocket_callback = websocket_callback
+        self.client_id = client_id
+        self.last_progress = 0
+    
+    def __call__(self, d: dict):
+        """
+        yt-dlp进度回调函数
+        
+        参数:
+            d: 包含下载状态信息的字典
+        """
+        if d['status'] == 'downloading':
+            # 提取进度信息
+            downloaded = d.get('downloaded_bytes', 0)
+            total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+            
+            if total > 0:
+                progress = int((downloaded / total) * 100)
+                
+                # 只在进度变化时推送（避免过于频繁）
+                if progress != self.last_progress:
+                    self.last_progress = progress
+                    
+                    # 如果提供了WebSocket回调，推送进度
+                    if self.websocket_callback and self.client_id:
+                        try:
+                            # 尝试在当前事件循环中创建任务
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                asyncio.create_task(
+                                    self.websocket_callback(self.client_id, {
+                                        "type": "download_progress",
+                                        "progress": progress,
+                                        "downloaded_bytes": downloaded,
+                                        "total_bytes": total,
+                                        "speed": d.get('speed', 0),
+                                        "eta": d.get('eta', 0)
+                                    })
+                                )
+                        except RuntimeError:
+                            # 如果没有运行的事件循环，忽略WebSocket推送
+                            pass
+        
+        elif d['status'] == 'finished':
+            # 下载完成
+            if self.websocket_callback and self.client_id:
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        asyncio.create_task(
+                            self.websocket_callback(self.client_id, {
+                                "type": "download_complete",
+                                "message": "视频下载完成，正在处理..."
+                            })
+                        )
+                except RuntimeError:
+                    pass
+
+
+async def download_video_from_url(
+    url: str,
+    user_id: str = "default_user",
+    websocket_callback: Optional[Callable] = None,
+    client_id: Optional[str] = None
+) -> VideoImportResult:
+    """
+    从URL下载视频
+    
+    参数:
+        url: 视频链接
+        user_id: 用户ID
+        websocket_callback: WebSocket回调函数（可选）
+        client_id: 客户端ID（可选）
+        
+    返回:
+        VideoImportResult: 导入结果
+        
+    异常:
+        InvalidUrlError: 链接无效
+        VideoNotAccessibleError: 视频不可访问
+        UnsupportedFormatError: 不支持的视频格式
+        MetadataExtractionError: 元数据提取失败
+    """
+    # 生成唯一视频ID
+    video_id = str(uuid.uuid4())
+    
+    # 配置yt-dlp选项
+    ydl_opts = {
+        'format': 'best[ext=mp4]/best',  # 优先下载mp4格式
+        'outtmpl': str(UPLOAD_DIR / f'{video_id}.%(ext)s'),
+        'quiet': True,
+        'no_warnings': True,
+        'progress_hooks': [DownloadProgressHook(websocket_callback, client_id)],
+        # 支持常见视频网站
+        'extract_flat': False,
+        # 超时设置
+        'socket_timeout': 30,
+    }
+    
+    try:
+        # 发送开始下载通知
+        if websocket_callback and client_id:
+            await websocket_callback(client_id, {
+                "type": "download_start",
+                "message": "开始下载视频...",
+                "url": url
+            })
+        
+        # 使用yt-dlp下载视频
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # 先提取视频信息（验证URL有效性）
+            try:
+                info = ydl.extract_info(url, download=False)
+                if info is None:
+                    raise InvalidUrlError(f"无法解析视频链接: {url}")
+            except yt_dlp.utils.DownloadError as e:
+                error_msg = str(e)
+                if "Unsupported URL" in error_msg or "not a valid URL" in error_msg:
+                    raise InvalidUrlError(f"无效的视频链接: {url}")
+                elif "Video unavailable" in error_msg or "Private video" in error_msg:
+                    raise VideoNotAccessibleError(f"视频不可访问: {url}")
+                else:
+                    raise VideoNotAccessibleError(f"下载失败: {error_msg}")
+            except Exception as e:
+                raise InvalidUrlError(f"链接解析失败: {str(e)}")
+            
+            # 下载视频
+            try:
+                info = ydl.extract_info(url, download=True)
+            except yt_dlp.utils.DownloadError as e:
+                raise VideoNotAccessibleError(f"视频下载失败: {str(e)}")
+            except Exception as e:
+                raise VideoNotAccessibleError(f"下载过程出错: {str(e)}")
+        
+        # 查找下载的文件
+        downloaded_file = None
+        for ext in ['mp4', 'mkv', 'webm', 'avi', 'mov']:
+            potential_file = UPLOAD_DIR / f'{video_id}.{ext}'
+            if potential_file.exists():
+                downloaded_file = potential_file
+                break
+        
+        if not downloaded_file or not downloaded_file.exists():
+            raise VideoNotAccessibleError("下载的文件未找到")
+        
+        # 如果不是支持的格式，需要转换
+        file_ext = downloaded_file.suffix.lower()
+        if file_ext not in SUPPORTED_FORMATS:
+            # 转换为mp4格式
+            output_file = UPLOAD_DIR / f'{video_id}.mp4'
+            
+            if websocket_callback and client_id:
+                await websocket_callback(client_id, {
+                    "type": "converting",
+                    "message": "正在转换视频格式..."
+                })
+            
+            try:
+                # 使用FFmpeg转换
+                cmd = [
+                    'ffmpeg',
+                    '-i', str(downloaded_file),
+                    '-c:v', 'libx264',
+                    '-c:a', 'aac',
+                    '-strict', 'experimental',
+                    '-y',  # 覆盖输出文件
+                    str(output_file)
+                ]
+                
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5分钟超时
+                )
+                
+                if result.returncode != 0:
+                    raise Exception(f"视频转换失败: {result.stderr}")
+                
+                # 删除原文件
+                downloaded_file.unlink()
+                downloaded_file = output_file
+                file_ext = '.mp4'
+                
+            except subprocess.TimeoutExpired:
+                if downloaded_file.exists():
+                    downloaded_file.unlink()
+                raise MetadataExtractionError("视频转换超时")
+            except Exception as e:
+                if downloaded_file.exists():
+                    downloaded_file.unlink()
+                raise MetadataExtractionError(f"视频转换失败: {str(e)}")
+        
+        file_path = str(downloaded_file)
+        file_format = file_ext.lstrip('.')
+        
+        # 发送元数据提取通知
+        if websocket_callback and client_id:
+            await websocket_callback(client_id, {
+                "type": "extracting_metadata",
+                "message": "正在提取视频元数据..."
+            })
+        
+        try:
+            # 提取视频元数据
+            metadata_dict = extract_video_metadata(file_path)
+            
+            # 创建元数据对象
+            metadata = VideoMetadata(
+                video_id=video_id,
+                format=VideoFormat(file_format),
+                resolution=metadata_dict['resolution'],
+                duration=metadata_dict['duration'],
+                codec=metadata_dict['codec'],
+                framerate=metadata_dict['framerate'],
+                bitrate=metadata_dict['bitrate'],
+                file_size=metadata_dict['file_size'],
+                created_at=datetime.now()
+            )
+            
+            # 保存到数据库
+            db_gen = get_db()
+            db = await anext(db_gen)
+            try:
+                await create_video(
+                    db=db,
+                    video_id=video_id,
+                    user_id=user_id,
+                    format=file_format,
+                    resolution_width=metadata.resolution[0],
+                    resolution_height=metadata.resolution[1],
+                    duration=metadata.duration,
+                    codec=metadata.codec,
+                    framerate=metadata.framerate,
+                    bitrate=metadata.bitrate,
+                    file_size=metadata.file_size,
+                    storage_path=file_path,
+                    import_source="url"
+                )
+            finally:
+                await db.close()
+            
+            # 发送完成通知
+            if websocket_callback and client_id:
+                await websocket_callback(client_id, {
+                    "type": "import_complete",
+                    "message": "视频导入完成",
+                    "video_id": video_id
+                })
+            
+            # 返回导入结果
+            return VideoImportResult(
+                video_id=video_id,
+                metadata=metadata,
+                storage_path=file_path,
+                import_source="url",
+                import_time=datetime.now()
+            )
+            
+        except MetadataExtractionError as e:
+            # 元数据提取失败，删除已下载的文件
+            if Path(file_path).exists():
+                Path(file_path).unlink()
+            raise e
+        
+    except (InvalidUrlError, VideoNotAccessibleError, UnsupportedFormatError, MetadataExtractionError):
+        # 重新抛出已知错误
+        raise
+    except Exception as e:
+        # 捕获其他未预期的错误
+        # 清理可能下载的文件
+        for ext in ['mp4', 'mkv', 'webm', 'avi', 'mov']:
+            potential_file = UPLOAD_DIR / f'{video_id}.{ext}'
+            if potential_file.exists():
+                potential_file.unlink()
+        
+        raise VideoNotAccessibleError(f"下载过程出错: {str(e)}")

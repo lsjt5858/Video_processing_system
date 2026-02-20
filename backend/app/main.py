@@ -130,11 +130,15 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 # 导入视频上传模块
 from fastapi import File, UploadFile as FastAPIUploadFile
 from typing import List as TypingList
+from pydantic import BaseModel
 from .video_import import (
     upload_single_video,
     upload_batch_videos,
+    download_video_from_url,
     FileSizeExceededError,
-    UnsupportedFormatError
+    UnsupportedFormatError,
+    InvalidUrlError,
+    VideoNotAccessibleError
 )
 
 
@@ -210,4 +214,69 @@ async def batch_upload_videos(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"批量上传失败: {str(e)}"
+        )
+
+
+
+# 定义请求模型
+class VideoDownloadRequest(BaseModel):
+    url: str
+    user_id: str = "default_user"
+    client_id: str = None  # 用于WebSocket进度推送
+
+
+@app.post("/api/videos/download")
+async def download_video(request: VideoDownloadRequest):
+    """
+    通过URL下载视频
+    
+    参数:
+        request: 包含视频URL和用户ID的请求体
+        
+    返回:
+        VideoImportResult: 导入结果
+    """
+    try:
+        # 如果提供了client_id，使用WebSocket推送进度
+        websocket_callback = manager.send_message if request.client_id else None
+        
+        result = await download_video_from_url(
+            url=request.url,
+            user_id=request.user_id,
+            websocket_callback=websocket_callback,
+            client_id=request.client_id
+        )
+        
+        return {
+            "success": True,
+            "data": {
+                "video_id": result.video_id,
+                "url": request.url,
+                "file_size": result.metadata.file_size,
+                "format": result.metadata.format,
+                "resolution": result.metadata.resolution,
+                "duration": result.metadata.duration,
+                "storage_path": result.storage_path,
+                "import_time": result.import_time.isoformat()
+            }
+        }
+    except InvalidUrlError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except VideoNotAccessibleError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except UnsupportedFormatError as e:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"下载失败: {str(e)}"
         )
