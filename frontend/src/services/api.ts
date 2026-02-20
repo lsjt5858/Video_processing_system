@@ -193,6 +193,13 @@ export const batchRemoveWatermark = async (tasks: any[]): Promise<{ tasks: Proce
   return api.post('/batch/remove', { tasks })
 }
 
+/**
+ * 批量检测水印
+ */
+export const batchDetect = async (videoIds: string[]): Promise<{ results: any[] }> => {
+  return api.post('/batch/detect', { video_ids: videoIds })
+}
+
 // ==================== 任务相关 API ====================
 
 /**
@@ -209,8 +216,16 @@ export const getTasks = async (params?: {
   page?: number
   page_size?: number
   status?: string
+  task_type?: string
+  search?: string
+  start_date?: string
+  end_date?: string
 }): Promise<{ tasks: ProcessingTask[]; total: number }> => {
-  return api.get('/tasks', { params })
+  const response: any = await api.get('/tasks', { params })
+  return {
+    tasks: response.tasks || [],
+    total: response.pagination?.total_count || response.total || 0
+  }
 }
 
 export default api
