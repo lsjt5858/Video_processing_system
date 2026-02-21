@@ -58,13 +58,13 @@ const Layout: React.FC = () => {
   }
 
   return (
-    <AntLayout style={{ minHeight: '100vh', height: '100vh', overflow: 'hidden' }}>
-      <Sider 
-        collapsible 
-        collapsed={collapsed} 
+    <AntLayout style={{ minHeight: '100vh', height: '100vh', overflow: 'hidden', background: 'transparent' }}>
+      <Sider
+        collapsible
+        collapsed={collapsed}
         onCollapse={setCollapsed}
-        theme="dark"
-        width={220}
+        theme="light"
+        width={240}
         style={{
           overflow: 'auto',
           height: '100vh',
@@ -72,74 +72,84 @@ const Layout: React.FC = () => {
           left: 0,
           top: 0,
           bottom: 0,
+          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.02)',
+          borderRight: '1px solid var(--border-light)',
+          zIndex: 20,
+          background: 'rgba(255, 255, 255, 0.5)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
         }}
       >
-        <div style={{ 
-          height: 64, 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          height: 64,
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'center',
-          color: 'white',
-          fontSize: collapsed ? '18px' : '20px',
-          fontWeight: 'bold',
+          color: 'var(--primary-color)',
+          fontSize: collapsed ? '18px' : '22px',
+          fontWeight: 800,
           padding: '0 16px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-          background: 'rgba(0, 0, 0, 0.2)',
+          borderBottom: '1px solid rgba(0, 0, 0, 0.04)',
+          background: 'transparent',
+          letterSpacing: '0.5px',
         }}>
-          {collapsed ? '一键美' : '一键美'}
+          {collapsed ? '一键美' : '✨ 一键美'}
         </div>
         <Menu
-          theme="dark"
+          theme="light"
           mode="inline"
           selectedKeys={[getSelectedKey()]}
           items={menuItems}
           onClick={handleMenuClick}
-          style={{ borderRight: 0 }}
+          style={{ borderRight: 0, background: 'transparent' }}
         />
       </Sider>
-      
-      <AntLayout style={{ marginLeft: collapsed ? 80 : 220, transition: 'margin-left 0.2s' }}>
-        <Header style={{ 
-          background: '#fff', 
-          padding: '0 24px',
+
+      <AntLayout style={{ marginLeft: collapsed ? 80 : 240, transition: 'margin-left 0.2s cubic-bezier(0.2, 0, 0, 1)', background: 'transparent' }}>
+        <Header style={{
+          background: 'rgba(255, 255, 255, 0.7)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          padding: '0 32px',
           display: 'flex',
           alignItems: 'center',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+          boxShadow: '0 4px 24px -8px rgba(0,0,0,0.05)',
           position: 'sticky',
           top: 0,
           zIndex: 10,
           height: 64,
+          borderBottom: '1px solid rgba(255, 255, 255, 0.6)',
         }}>
-          <Title level={4} style={{ margin: 0, color: '#1890ff' }}>
-            一键美 - 智能视频处理平台
+          <Title level={4} className="gradient-text" style={{ margin: 0, fontWeight: 700 }}>
+            智能视频处理平台
           </Title>
         </Header>
-        
-        <Content style={{ 
-          margin: '16px',
-          padding: '20px',
-          background: '#f0f2f5',
+
+        <Content style={{
+          margin: '0',
+          padding: '24px 32px',
+          background: 'transparent',
           overflow: 'auto',
           height: 'calc(100vh - 64px - 48px)', // 减去 header 和 footer 高度
+          position: 'relative'
         }}>
-          <div style={{ 
-            maxWidth: '1400px', 
+          <div style={{
+            maxWidth: '1400px',
             margin: '0 auto',
             minHeight: '100%',
           }}>
             <Outlet />
           </div>
         </Content>
-        
-        <Footer style={{ 
-          textAlign: 'center', 
-          background: '#fff',
+
+        <Footer style={{
+          textAlign: 'center',
+          background: 'transparent',
           padding: '12px 24px',
-          borderTop: '1px solid #f0f0f0',
           fontSize: '13px',
-          color: '#666',
+          color: 'var(--text-tertiary)',
         }}>
-          一键美 ©2024 - 让视频更美好
+          ✨ 一键美 ©2024 - 打造极致视频体验
         </Footer>
       </AntLayout>
     </AntLayout>

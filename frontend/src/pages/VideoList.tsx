@@ -1,20 +1,20 @@
 import { useState } from 'react'
-import { 
-  Card, 
-  Table, 
-  Button, 
-  Space, 
-  Tag, 
-  message, 
-  Modal, 
-  Input, 
-  Select, 
+import {
+  Card,
+  Table,
+  Button,
+  Space,
+  Tag,
+  message,
+  Modal,
+  Input,
+  Select,
   DatePicker,
   Empty,
   Skeleton
 } from 'antd'
-import { 
-  PlusOutlined, 
+import {
+  PlusOutlined,
   ReloadOutlined,
   ClearOutlined
 } from '@ant-design/icons'
@@ -35,12 +35,12 @@ const { RangePicker } = DatePicker
  */
 const VideoList: React.FC = () => {
   const navigate = useNavigate()
-  
+
   // 搜索和筛选状态
   const [searchText, setSearchText] = useState('')
   const [formatFilter, setFormatFilter] = useState<VideoFormat | undefined>()
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null)
-  
+
   // 使用自定义 Hook 管理视频列表
   const {
     videos,
@@ -60,7 +60,7 @@ const VideoList: React.FC = () => {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
     const secs = Math.floor(seconds % 60)
-    
+
     if (hours > 0) {
       return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
     }
@@ -121,7 +121,7 @@ const VideoList: React.FC = () => {
 
     // 按文件名搜索
     if (searchText) {
-      filtered = filtered.filter(video => 
+      filtered = filtered.filter(video =>
         video.storage_path.toLowerCase().includes(searchText.toLowerCase()) ||
         video.video_id.toLowerCase().includes(searchText.toLowerCase())
       )
@@ -175,7 +175,7 @@ const VideoList: React.FC = () => {
       title: '分辨率',
       key: 'resolution',
       width: 120,
-      render: (_, record) => 
+      render: (_, record) =>
         `${record.resolution.width}×${record.resolution.height}`,
     },
     {
@@ -212,7 +212,7 @@ const VideoList: React.FC = () => {
       fixed: 'right',
       render: (_, record) => {
         const filename = record.storage_path.split('/').pop() || record.video_id
-        
+
         return (
           <ActionButtons
             videoId={record.video_id}
@@ -231,19 +231,20 @@ const VideoList: React.FC = () => {
   const filteredVideos = getFilteredVideos()
 
   return (
-    <div className="page-container">
-      <Card 
+    <div className="fade-in">
+      <Card
+        className="glass-card"
         title={
           <Space size="middle">
-            <span style={{ fontSize: '18px', fontWeight: 600 }}>视频列表</span>
-            <Tag color="blue" style={{ fontSize: '14px', padding: '4px 12px' }}>
-              {total} 个视频
+            <span style={{ fontSize: '20px', fontWeight: 700, color: '#1e293b' }}>视频列表</span>
+            <Tag color="#6366f1" style={{ fontSize: '14px', padding: '4px 12px', borderRadius: '16px', border: 'none' }}>
+              共 {total} 个视频
             </Tag>
           </Space>
         }
         extra={
           <Space size="middle">
-            <Button 
+            <Button
               icon={<ReloadOutlined />}
               onClick={refreshVideos}
               loading={loading}
@@ -251,8 +252,8 @@ const VideoList: React.FC = () => {
             >
               刷新
             </Button>
-            <Button 
-              type="primary" 
+            <Button
+              type="primary"
               icon={<PlusOutlined />}
               onClick={() => navigate('/upload')}
               size="middle"
@@ -267,13 +268,10 @@ const VideoList: React.FC = () => {
           </Space>
         }
         bordered={false}
-        style={{
-          borderRadius: '12px',
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
-        }}
+        style={{ borderRadius: '16px' }}
       >
         {/* 搜索和筛选区域 */}
-        <div className="search-bar">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
           <Search
             placeholder="搜索文件名或视频ID"
             allowClear
@@ -303,7 +301,7 @@ const VideoList: React.FC = () => {
             onChange={(dates) => setDateRange(dates as [Dayjs, Dayjs] | null)}
             size="large"
           />
-          <Button 
+          <Button
             icon={<ClearOutlined />}
             onClick={handleClearFilters}
             size="large"
@@ -321,8 +319,8 @@ const VideoList: React.FC = () => {
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           >
             {videos.length === 0 && (
-              <Button 
-                type="primary" 
+              <Button
+                type="primary"
                 icon={<PlusOutlined />}
                 onClick={() => navigate('/upload')}
               >

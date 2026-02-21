@@ -20,7 +20,7 @@ const TaskManager: React.FC = () => {
   const [selectedTask, setSelectedTask] = useState<ProcessingTask | null>(null)
   const [detailVisible, setDetailVisible] = useState(false)
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 })
-  
+
   // 筛选条件
   const [filters, setFilters] = useState({
     status: undefined as string | undefined,
@@ -34,7 +34,7 @@ const TaskManager: React.FC = () => {
     onMessage: (data) => {
       if (data.type === 'task_update') {
         // 更新任务列表中的任务状态
-        setTasks(prev => prev.map(task => 
+        setTasks(prev => prev.map(task =>
           task.task_id === data.task_id ? { ...task, ...data.task } : task
         ))
       } else if (data.type === 'task_complete') {
@@ -282,8 +282,8 @@ const TaskManager: React.FC = () => {
       fixed: 'right' as const,
       render: (record: ProcessingTask) => (
         <Space size="small">
-          <Button 
-            type="link" 
+          <Button
+            type="link"
             icon={<EyeOutlined />}
             onClick={() => handleViewDetail(record)}
             size="small"
@@ -291,8 +291,8 @@ const TaskManager: React.FC = () => {
             详情
           </Button>
           {record.status === 'completed' && (
-            <Button 
-              type="link" 
+            <Button
+              type="link"
               icon={<DownloadOutlined />}
               onClick={() => handleDownload(record.video_id, record.task_id)}
               size="small"
@@ -301,8 +301,8 @@ const TaskManager: React.FC = () => {
             </Button>
           )}
           {record.status === 'failed' && (
-            <Button 
-              type="link" 
+            <Button
+              type="link"
               icon={<RedoOutlined />}
               onClick={() => handleRetry(record.task_id)}
               size="small"
@@ -311,8 +311,8 @@ const TaskManager: React.FC = () => {
             </Button>
           )}
           {record.status === 'processing' && (
-            <Button 
-              type="link" 
+            <Button
+              type="link"
               danger
               onClick={() => handleCancel(record.task_id)}
               size="small"
@@ -320,9 +320,9 @@ const TaskManager: React.FC = () => {
               取消
             </Button>
           )}
-          <Button 
-            type="link" 
-            danger 
+          <Button
+            type="link"
+            danger
             icon={<DeleteOutlined />}
             onClick={() => handleDelete(record.task_id)}
             size="small"
@@ -335,11 +335,13 @@ const TaskManager: React.FC = () => {
   ]
 
   return (
-    <div>
-      <Card 
-        title="任务管理" 
+    <div className="fade-in">
+      <Card
+        title={<span style={{ fontWeight: 700, fontSize: '18px', color: '#1e293b' }}>任务管理</span>}
+        className="glass-card"
+        bordered={false}
         extra={
-          <Button 
+          <Button
             icon={<ReloadOutlined />}
             onClick={handleRefresh}
             loading={loading}
@@ -424,8 +426,8 @@ const TaskManager: React.FC = () => {
             关闭
           </Button>,
           selectedTask?.status === 'completed' && (
-            <Button 
-              key="download" 
+            <Button
+              key="download"
               type="primary"
               icon={<DownloadOutlined />}
               onClick={() => {
@@ -438,8 +440,8 @@ const TaskManager: React.FC = () => {
             </Button>
           ),
           selectedTask?.status === 'failed' && (
-            <Button 
-              key="retry" 
+            <Button
+              key="retry"
               type="primary"
               icon={<RedoOutlined />}
               onClick={() => {
@@ -459,8 +461,8 @@ const TaskManager: React.FC = () => {
           <Descriptions column={1} bordered>
             <Descriptions.Item label="任务ID">{selectedTask.task_id}</Descriptions.Item>
             <Descriptions.Item label="视频ID">
-              <Button 
-                type="link" 
+              <Button
+                type="link"
                 onClick={() => {
                   navigate(`/videos/${selectedTask.video_id}`)
                   setDetailVisible(false)
@@ -479,8 +481,8 @@ const TaskManager: React.FC = () => {
             <Descriptions.Item label="状态">
               <Tag color={
                 selectedTask.status === 'completed' ? 'success' :
-                selectedTask.status === 'failed' ? 'error' :
-                selectedTask.status === 'processing' ? 'processing' : 'default'
+                  selectedTask.status === 'failed' ? 'error' :
+                    selectedTask.status === 'processing' ? 'processing' : 'default'
               }>
                 {selectedTask.status === 'pending' && '等待中'}
                 {selectedTask.status === 'processing' && '处理中'}

@@ -13,7 +13,30 @@ import './App.css'
  */
 function App() {
   return (
-    <ConfigProvider locale={zhCN}>
+    <ConfigProvider 
+      locale={zhCN}
+      theme={{
+        token: {
+          colorPrimary: '#6366f1',
+          colorInfo: '#6366f1',
+          colorSuccess: '#10b981',
+          colorWarning: '#f59e0b',
+          colorError: '#ef4444',
+          borderRadius: 8,
+          borderRadiusLG: 16,
+          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+        },
+        components: {
+          Card: {
+            borderRadiusLG: 16,
+          },
+          Button: {
+            borderRadius: 8,
+            controlHeight: 40,
+          },
+        }
+      }}
+    >
       <WebSocketProvider 
         url="ws://localhost:8000/ws"
         autoConnect={true}

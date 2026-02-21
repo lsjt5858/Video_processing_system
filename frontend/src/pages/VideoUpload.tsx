@@ -1,21 +1,21 @@
 import { useState, useEffect } from 'react'
-import { 
-  Card, 
-  Upload, 
-  Button, 
-  Form, 
-  Input, 
-  Tabs, 
-  Space, 
-  message, 
-  Progress, 
+import {
+  Card,
+  Upload,
+  Button,
+  Form,
+  Input,
+  Tabs,
+  Space,
+  message,
+  Progress,
   List,
   Typography,
   Alert
 } from 'antd'
-import { 
-  UploadOutlined, 
-  LinkOutlined, 
+import {
+  UploadOutlined,
+  LinkOutlined,
   InboxOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined
@@ -24,14 +24,9 @@ import { useNavigate } from 'react-router-dom'
 import type { UploadFile, UploadProps } from 'antd'
 import { uploadVideo, batchUploadVideos, downloadVideoFromUrl } from '@/services/api'
 import { useWebSocket } from '@/hooks/useWebSocket'
-import { 
-  validateFileSize, 
-  validateFileFormat, 
-  validateUrl, 
-  validateFiles,
-  handleApiError,
-  showErrorMessage,
-  showErrorNotification
+import {
+  validateFileSize,
+  validateFileFormat,
 } from '@/utils/errorHandler'
 
 const { Dragger } = Upload
@@ -64,27 +59,27 @@ const VideoUpload: React.FC = () => {
   // WebSocket连接用于实时进度更新（仅在上传时启用）
   const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   const wsUrl = `ws://localhost:8000/ws/${clientId}`
-  
+
   const { isConnected } = useWebSocket(wsUrl, {
     onMessage: (data) => {
       console.log('WebSocket message:', data)
-      
+
       // 处理上传进度更新
       if (data.type === 'upload_progress') {
         updateFileProgress(data.filename, data.progress)
       }
-      
+
       // 处理下载进度更新
       if (data.type === 'download_progress') {
         setDownloadProgress(data.progress)
       }
-      
+
       // 处理任务完成
       if (data.type === 'task_completed') {
         message.success(`任务完成: ${data.task_id}`)
       }
     },
-    onError: (error) => {
+    onError: () => {
       console.warn('WebSocket 连接错误，将使用轮询方式获取进度')
     },
     enabled: wsEnabled,
@@ -100,9 +95,9 @@ const VideoUpload: React.FC = () => {
 
   // 更新单个文件的上传进度
   const updateFileProgress = (filename: string, progress: number) => {
-    setFileStatuses(prev => 
-      prev.map(item => 
-        item.file.name === filename 
+    setFileStatuses(prev =>
+      prev.map(item =>
+        item.file.name === filename
           ? { ...item, progress, status: progress === 100 ? 'success' : 'uploading' }
           : item
       )
@@ -115,12 +110,12 @@ const VideoUpload: React.FC = () => {
     if (!validateFileSize(file, 5)) {
       return false
     }
-    
+
     // 验证文件格式
     if (!validateFileFormat(file, ['mp4', 'avi', 'mov', 'mkv'])) {
       return false
     }
-    
+
     return true
   }
 
@@ -152,16 +147,16 @@ const VideoUpload: React.FC = () => {
 
       setFileStatuses([{ ...status, status: 'success', progress: 100 }])
       message.success('上传成功！')
-      
+
       setTimeout(() => {
         navigate('/videos')
       }, 1500)
     } catch (error: any) {
-      setFileStatuses([{ 
-        ...status, 
-        status: 'error', 
-        progress: 0, 
-        error: error.message || '上传失败' 
+      setFileStatuses([{
+        ...status,
+        status: 'error',
+        progress: 0,
+        error: error.message || '上传失败'
       }])
       message.error('上传失败')
     } finally {
@@ -185,14 +180,14 @@ const VideoUpload: React.FC = () => {
     // 验证所有文件
     const files = fileList.map(f => f.originFileObj as File)
     const validFiles = files.filter(validateFile)
-    
+
     if (validFiles.length === 0) {
       return
     }
 
     setWsEnabled(true)
     setUploading(true)
-    
+
     // 初始化所有文件状态
     const initialStatuses: FileUploadStatus[] = validFiles.map(file => ({
       file,
@@ -204,26 +199,26 @@ const VideoUpload: React.FC = () => {
     try {
       // 使用批量上传API
       await batchUploadVideos(validFiles)
-      
+
       // 更新所有文件为成功状态
-      setFileStatuses(prev => 
+      setFileStatuses(prev =>
         prev.map(item => ({
           ...item,
           status: 'success',
           progress: 100
         }))
       )
-      
+
       message.success(`成功上传 ${validFiles.length} 个文件！`)
-      
+
       setTimeout(() => {
         navigate('/videos')
       }, 2000)
     } catch (error: any) {
       message.error('批量上传失败')
-      
+
       // 标记所有为失败
-      setFileStatuses(prev => 
+      setFileStatuses(prev =>
         prev.map(item => ({
           ...item,
           status: 'error',
@@ -244,10 +239,10 @@ const VideoUpload: React.FC = () => {
 
     try {
       await downloadVideoFromUrl(values.url)
-      
+
       setDownloadProgress(100)
       message.success('视频下载成功！')
-      
+
       setTimeout(() => {
         navigate('/videos')
       }, 1500)
@@ -322,14 +317,19 @@ const VideoUpload: React.FC = () => {
   }
 
   return (
-    <div>
-      <Card title="视频上传">
+    <div className="fade-in">
+      <Card
+        title={<span style={{ fontWeight: 700, fontSize: '18px' }}>视频上传</span>}
+        className="glass-card"
+        bordered={false}
+        style={{ borderRadius: '16px' }}
+      >
         <Alert
           message="上传说明"
           description="支持 MP4、AVI、MOV、MKV 格式，单个文件不超过 5GB，批量上传上限为 50 个文件"
           type="info"
           showIcon
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: 24, borderRadius: 8, border: 'none', background: 'rgba(99, 102, 241, 0.05)' }}
         />
 
         <Tabs
@@ -344,19 +344,23 @@ const VideoUpload: React.FC = () => {
               ),
               children: (
                 <Space direction="vertical" style={{ width: '100%' }} size="large">
-                  <Dragger {...uploadProps} maxCount={1}>
+                  <Dragger
+                    {...uploadProps}
+                    maxCount={1}
+                    style={{ background: 'rgba(255, 255, 255, 0.5)', border: '2px dashed #cbd5e1', borderRadius: 12, padding: '24px 0' }}
+                  >
                     <p className="ant-upload-drag-icon">
-                      <InboxOutlined />
+                      <InboxOutlined style={{ color: '#6366f1' }} />
                     </p>
-                    <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
-                    <p className="ant-upload-hint">
+                    <p className="ant-upload-text" style={{ fontWeight: 600, color: '#1e293b' }}>点击或拖拽文件到此区域上传</p>
+                    <p className="ant-upload-hint" style={{ color: '#94a3b8' }}>
                       支持单个视频文件上传，支持 MP4、AVI、MOV、MKV 格式
                     </p>
                   </Dragger>
 
                   <Space>
-                    <Button 
-                      type="primary" 
+                    <Button
+                      type="primary"
                       onClick={handleSingleUpload}
                       loading={uploading}
                       disabled={fileList.length === 0}
@@ -381,12 +385,15 @@ const VideoUpload: React.FC = () => {
               ),
               children: (
                 <Space direction="vertical" style={{ width: '100%' }} size="large">
-                  <Dragger {...uploadProps}>
+                  <Dragger
+                    {...uploadProps}
+                    style={{ background: 'rgba(255, 255, 255, 0.5)', border: '2px dashed #cbd5e1', borderRadius: 12, padding: '24px 0' }}
+                  >
                     <p className="ant-upload-drag-icon">
-                      <InboxOutlined />
+                      <InboxOutlined style={{ color: '#6366f1' }} />
                     </p>
-                    <p className="ant-upload-text">点击或拖拽多个文件到此区域上传</p>
-                    <p className="ant-upload-hint">
+                    <p className="ant-upload-text" style={{ fontWeight: 600, color: '#1e293b' }}>点击或拖拽多个文件到此区域上传</p>
+                    <p className="ant-upload-hint" style={{ color: '#94a3b8' }}>
                       支持批量选择，最多 50 个文件，支持 MP4、AVI、MOV、MKV 格式
                     </p>
                   </Dragger>
@@ -400,14 +407,14 @@ const VideoUpload: React.FC = () => {
                   )}
 
                   <Space>
-                    <Button 
-                      type="primary" 
+                    <Button
+                      type="primary"
                       onClick={handleBatchUpload}
                       loading={uploading}
                     >
                       开始批量上传
                     </Button>
-                    <Button 
+                    <Button
                       onClick={() => setFileList([])}
                       disabled={fileList.length === 0}
                     >
@@ -436,8 +443,8 @@ const VideoUpload: React.FC = () => {
                     layout="vertical"
                     onFinish={handleUrlDownload}
                   >
-                    <Form.Item 
-                      name="url" 
+                    <Form.Item
+                      name="url"
                       label="视频链接"
                       rules={[
                         { required: true, message: '请输入视频链接' },
@@ -445,8 +452,8 @@ const VideoUpload: React.FC = () => {
                       validateStatus={urlError ? 'error' : undefined}
                       help={urlError || undefined}
                     >
-                      <Input 
-                        placeholder="请输入视频链接（支持 YouTube、Bilibili 等平台）" 
+                      <Input
+                        placeholder="请输入视频链接（支持 YouTube、Bilibili 等平台）"
                         prefix={<LinkOutlined />}
                         size="large"
                         onChange={() => setUrlError(null)}
@@ -455,8 +462,8 @@ const VideoUpload: React.FC = () => {
 
                     {urlDownloading && (
                       <Form.Item>
-                        <Progress 
-                          percent={downloadProgress} 
+                        <Progress
+                          percent={downloadProgress}
                           status="active"
                           format={(percent) => `下载中 ${percent}%`}
                         />
@@ -465,9 +472,9 @@ const VideoUpload: React.FC = () => {
 
                     <Form.Item>
                       <Space>
-                        <Button 
-                          type="primary" 
-                          htmlType="button" 
+                        <Button
+                          type="primary"
+                          htmlType="button"
                           loading={urlDownloading}
                           onClick={async () => {
                             const rawUrl = form.getFieldValue('url')
