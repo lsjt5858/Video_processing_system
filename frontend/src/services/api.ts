@@ -157,14 +157,7 @@ export const markWatermark = async (videoId: string, regions: any[]): Promise<an
  * 获取水印区域列表
  */
 export const getWatermarks = async (videoId: string): Promise<any[]> => {
-  const response: any = await api.get(`/videos/${videoId}/watermarks`)
-  if (Array.isArray(response)) {
-    return response
-  }
-  if (response && Array.isArray(response.regions)) {
-    return response.regions
-  }
-  return []
+  return api.get(`/videos/${videoId}/watermarks`)
 }
 
 /**
@@ -190,7 +183,7 @@ export const removeWatermark = async (videoId: string, params: {
   mode: string
   regions: any[]
   custom_logo?: string
-}): Promise<{ task_id: string; video_id: string; status: string; message: string }> => {
+}): Promise<ProcessingTask> => {
   return api.post(`/videos/${videoId}/remove`, params)
 }
 
