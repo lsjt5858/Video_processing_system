@@ -77,7 +77,6 @@ const WatermarkRemoval: React.FC = () => {
     }
   }, [videoId])
 
-  // 监听任务完成
   useEffect(() => {
     if (task?.status === 'completed') {
       setProcessing(false)
@@ -89,7 +88,13 @@ const WatermarkRemoval: React.FC = () => {
       setProcessing(false)
       message.error(`处理失败: ${task.error_message || '未知错误'}`)
     }
-  }, [task])
+  }, [task?.status, task?.result])
+
+  useEffect(() => {
+    if (taskId && progress > 0) {
+      setProcessing(true)
+    }
+  }, [taskId, progress])
 
   const loadVideoAndWatermarks = async () => {
     if (!videoId) return
@@ -188,36 +193,38 @@ const WatermarkRemoval: React.FC = () => {
     setProcessing(true)
 
     try {
-      // 准备处理参数
       const params: any = {
         mode,
         regions: regions.map(r => ({
           region_id: r.region_id,
-          bbox: r.bbox,
+          bbox: {
+            x: r.bbox.x,
+            y: r.bbox.y,
+            width: r.bbox.width,
+            height: r.bbox.height
+          },
           start_time: r.start_time,
-          end_time: r.end_time
+          end_time: r.end_time,
+          watermark_type: r.watermark_type,
+          detection_method: r.detection_method
         }))
       }
       
-      // 根据模式添加特定参数
       if (mode === 'crop_reconstruct') {
         params.crop_params = cropParams
       } else if (mode === 'blur_replace') {
         params.blur_mode = blurMode
         if (blurMode === 'logo' && customLogo) {
-          // TODO: 上传logo文件并获取路径
           params.custom_logo = 'path/to/logo'
         }
       }
       
-      // 调用API开始处理
       const response = await removeWatermark(videoId, params)
       
-      // 保存任务ID用于进度跟踪
       setTaskId(response.task_id)
       message.success('任务已提交，正在处理...')
     } catch (error: any) {
-      message.error(error.response?.data?.error?.message || '提交任务失败')
+      message.error(error.response?.data?.detail || error.response?.data?.error?.message || '提交任务失败')
       setProcessing(false)
       console.error('Process error:', error)
     }

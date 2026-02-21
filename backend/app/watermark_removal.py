@@ -69,11 +69,11 @@ class WatermarkRemovalEngine:
             regions, video_width, video_height
         )
         
-        # 验证主体完整度
+        # 验证主体完整度（降低到80%以支持更多场景）
         content_integrity = crop_params['content_integrity']
-        if content_integrity < 0.90:
+        if content_integrity < 0.80:
             raise ValueError(
-                f"裁剪后主体内容完整度 {content_integrity:.2%} 低于要求的90%"
+                f"裁剪后主体内容完整度 {content_integrity:.2%} 低于要求的80%"
             )
         
         # 生成输出文件路径

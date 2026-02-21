@@ -103,12 +103,15 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
 
       ws.onmessage = (event) => {
         try {
-          const message: WebSocketMessage = JSON.parse(event.data)
-          console.log('WebSocket message received:', message)
+          const raw = JSON.parse(event.data)
+          console.log('WebSocket message received:', raw)
+          
+          const message: WebSocketMessage = raw.type
+            ? raw
+            : { type: raw.type || 'unknown', data: raw, timestamp: new Date().toISOString() }
           
           setLastMessage(message)
           
-          // 通知订阅者
           const subscribers = subscribersRef.current.get(message.type)
           if (subscribers) {
             subscribers.forEach(callback => {
@@ -120,7 +123,6 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
             })
           }
           
-          // 通知所有订阅者（使用 '*' 作为通配符）
           const allSubscribers = subscribersRef.current.get('*')
           if (allSubscribers) {
             allSubscribers.forEach(callback => {
